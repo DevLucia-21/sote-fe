@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
   # S:ote_v7
 
@@ -9,3 +10,6 @@
 
   Run `npm run dev` to start the development server.
   
+=======
+# sote-ui
+>>>>>>> 9810060113c06f26ba8801384a5a08bc0188d91f
