@@ -319,7 +319,9 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
       });
 
       localStorage.setItem("accessToken", res.data.accessToken);
-
+      localStorage.setItem('refreshToken', res.data.refreshToken);
+      localStorage.setItem('expiresIn', res.data.expiresIn);
+      localStorage.setItem("user_id", res.data.userId);
       onLogin();
     } catch (error) {
       console.error('Login error:', error);

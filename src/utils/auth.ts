@@ -1,7 +1,7 @@
 // 토큰 관리 유틸리티
 
-const ACCESS_TOKEN_KEY = 'sote_access_token';
-const REFRESH_TOKEN_KEY = 'sote_refresh_token';
+const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
 
 export const AuthStorage = {
   // Access Token
