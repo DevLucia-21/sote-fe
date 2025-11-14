@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -138,34 +139,27 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
   // Loading state
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mock API calls (replace with real API)
+  // 보안 질문, 음악 장르 불러오기
   useEffect(() => {
     if (authMode === 'signup' || authMode === 'findEmail' || authMode === 'findPassword') {
-      // Fetch genres
-      setGenres([
-        { id: 1, name: '발라드' },
-        { id: 2, name: 'R&B' },
-        { id: 3, name: '재즈' },
-        { id: 4, name: '팝' },
-        { id: 5, name: '록' },
-        { id: 6, name: '클래식' },
-        { id: 7, name: '힙합' },
-        { id: 8, name: '인디' }
-      ]);
       
-      // Fetch security questions
-      setSecurityQuestions([
-        { id: 1, questionText: '처음 키운 반려동물 이름은?' },
-        { id: 2, questionText: '졸업한 초등학교 이름은?' },
-        { id: 3, questionText: '출생 도시 이름은?' },
-        { id: 4, questionText: '어렸을 적 별명은?' },
-        { id: 5, questionText: '첫 번째 휴대전화 기종은?' },
-        { id: 6, questionText: '가장 좋아하는 음식은?' },
-        { id: 7, questionText: '존경하는 인물은?' },
-        { id: 8, questionText: '첫 직장 이름은?' },
-        { id: 9, questionText: '가장 기억에 남는 여행지는?' },
-        { id: 10, questionText: '좋아하는 책 제목은?' }
-      ]);
+      const fetchInitialData = async () => {
+        try {
+          // 1. 장르 불러오기
+          const genreRes = await api.get("/api/genres");
+          setGenres(genreRes.data);
+
+          // 2. 보안 질문 불러오기
+          const questionRes = await api.get("/api/security-questions");
+          setSecurityQuestions(questionRes.data);
+
+        } catch (err) {
+          console.error("초기 데이터 불러오기 실패:", err);
+          toast.error("정보를 불러오는 중 문제가 발생했습니다.");
+        }
+      };
+
+      fetchInitialData();
     }
   }, [authMode]);
 
@@ -289,13 +283,21 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
     setIsLoading(true);
     
     try {
-      // Mock success for demo (API not implemented yet)
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await api.post("/api/auth/signup", {
+        email: formData.email,
+        password: formData.password,
+        nickname: formData.nickname,
+        birthDate: formData.birthDate,
+        questionId: Number(formData.securityQuestionId),
+        securityAnswer: formData.securityAnswer,
+        character: formData.character,
+        musicPreferences: selectedGenres,
+      });
+
       setAuthMode('complete');
     } catch (error) {
       console.error('Signup error:', error);
-      setAuthMode('complete');
+      setErrors({ email: "회원가입 중 오류가 발생했습니다." });
     } finally {
       setIsLoading(false);
     }
@@ -311,13 +313,17 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
     setIsLoading(true);
     
     try {
-      // Mock success for demo (API not implemented yet)
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const res = await api.post("/api/auth/login", {
+        email: formData.email,
+        password: formData.password,
+      });
+
+      localStorage.setItem("accessToken", res.data.accessToken);
+
       onLogin();
     } catch (error) {
       console.error('Login error:', error);
-      onLogin();
+      setErrors({ password: "이메일 또는 비밀번호가 올바르지 않습니다." });
     } finally {
       setIsLoading(false);
     }
@@ -325,31 +331,46 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
 
   const handleFindEmail = async () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.findSecurityQuestionId) {
+
+    if (!formData.nickname) newErrors.nickname = '닉네임을 입력해주세요.';
+    if (!formData.birthDate) newErrors.birthDate = '생년월일을 입력해주세요.';
+    if (!formData.findSecurityQuestionId)
       newErrors.findSecurityQuestionId = '보안 질문을 선택해주세요.';
-    }
-    if (!formData.findSecurityAnswer) {
+    if (!formData.findSecurityAnswer)
       newErrors.findSecurityAnswer = '보안 답변을 입력해주세요.';
-    }
-    
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
-    
+
+    const payload = {
+    nickname: formData.nickname?.trim(),
+    birthDate: formData.birthDate?.trim(),
+    questionId: Number(formData.findSecurityQuestionId),
+    securityAnswer: formData.findSecurityAnswer?.trim(),
+  };
+  console.log("📤[FindEmail] Sending payload to server:", payload);
+  
     setIsLoading(true);
-    
+
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock response - replace with actual API response
-      setFoundEmail('user@example.com');
+      const res = await api.post('/api/users/find-email', {
+        nickname: formData.nickname.trim(),
+        birthDate: formData.birthDate.trim(),
+        questionId: Number(formData.findSecurityQuestionId),
+        securityAnswer: formData.findSecurityAnswer.trim(),
+      });
+
+      setFoundEmail(res.data.email);
       setAuthMode('emailResult');
+
     } catch (error) {
       console.error('Find email error:', error);
-      setErrors({ findSecurityAnswer: '보안 질문 답변이 일치하지 않습니다.' });
+
+      setErrors({
+        findSecurityAnswer: '입력하신 정보가 일치하지 않습니다.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -379,10 +400,18 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
     setIsLoading(true);
     
     try {
-      // Mock API call - replace with actual API
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await api.post("/api/users/find-pwd", {
+        email: formData.email,
+        questionId: Number(formData.findSecurityQuestionId),
+        securityAnswer: formData.findSecurityAnswer,
+      });
+
+      await api.post("/api/users/password-reset-temp", {
+        email: formData.email,
+        questionId: Number(formData.findSecurityQuestionId),
+        securityAnswer: formData.findSecurityAnswer,
+      });
       
-      // Mock success - replace with actual API response
       setAuthMode('passwordReset');
     } catch (error) {
       console.error('Find password error:', error);
@@ -880,6 +909,60 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
             </CardHeader>
             <CardContent>
               <form onSubmit={(e) => { e.preventDefault(); handleFindEmail(); }} className="space-y-4">
+                <div>
+                  <p className="text-sm mb-2" style={{ color: '#4A3228' }}>닉네임</p>
+                  <Input
+                    id="nickname"
+                    value={formData.nickname}
+                    onChange={(e) => handleInputChange('nickname', e.target.value)}
+                    placeholder="닉네임을 입력하세요"
+                    className={`border ${errors.nickname ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors.nickname && <p className="text-xs text-red-500 mt-1">{errors.nickname}</p>}
+                </div>
+
+                <div>
+                  <p className="text-sm mb-2" style={{ color: '#4A3228' }}>생년월일</p>
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      value={formData.birthDate}
+                      onChange={(e) => handleBirthDateInput(e.target.value)}
+                      placeholder="YYYY-MM-DD"
+                      className={`border pr-10 ${errors.birthDate ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+
+                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <CalendarIcon className="h-4 w-4" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          mode="single"
+                          selected={birthDateObj}
+                          onSelect={setBirthDateObj}
+                          disabled={(date) =>
+                            date > new Date() || date < new Date("1900-01-01")
+                          }
+                          initialFocus
+                          captionLayout="dropdown-buttons"
+                          fromYear={1900}
+                          toYear={new Date().getFullYear()}
+                          defaultMonth={birthDateObj || new Date(2000, 0)}
+                          components={{
+                            Caption: CustomCaption
+                          }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  {errors.birthDate && <p className="text-xs text-red-500 mt-1">{errors.birthDate}</p>}
+                </div>
                 <div>
                   <p className="text-sm mb-2" style={{ color: '#4A3228' }}>보안 질문</p>
                   <Select 
