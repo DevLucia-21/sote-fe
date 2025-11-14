@@ -36,7 +36,6 @@ import { Label } from './ui/label';
 import { toast } from 'sonner';
 import { HealthDataView } from './HealthDataView';
 import { WatchPairingView } from './settings/WatchPairingView';
-import { mockKeywords } from './diary/mockData';
 import { characterInfo as importedCharacterInfo, type CharacterType } from './common/characterImages';
 import { requestFcmToken, onForegroundMessage } from "../firebase-config";
 
@@ -205,24 +204,8 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
 
-  // Keywords State - localStorage에서 불러오거나 mockKeywords 사용
-  const [keywords, setKeywords] = useState<{ id: number; content: string }[]>(() => {
-    const saved = localStorage.getItem('userKeywords');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return mockKeywords;
-      }
-    }
-    return mockKeywords;
-  });
+  const [keywords, setKeywords] = useState<{ id: number; content: string }[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
-
-  // keywords 변경 시 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('userKeywords', JSON.stringify(keywords));
-  }, [keywords]);
 
   // Apply theme to document
   useEffect(() => {
@@ -363,7 +346,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
         toast.error("키워드를 불러올 수 없어요.");
       }
     }
-
     loadKeywords();
   }, []);
 
