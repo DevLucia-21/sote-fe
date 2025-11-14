@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -37,49 +38,46 @@ import { HealthDataView } from './HealthDataView';
 import { WatchPairingView } from './settings/WatchPairingView';
 import { mockKeywords } from './diary/mockData';
 import { characterInfo as importedCharacterInfo, type CharacterType } from './common/characterImages';
+import { requestFcmToken, onForegroundMessage } from "../firebase-config";
 
 type ViewType = 
   | 'main' 
   | 'profile' 
   | 'keywords'
   | 'health'
-  | 'watch-pairing'
-  | 'account-recovery'
-  | 'find-email'
-  | 'reset-temp';
+  | 'watch-pairing';
 
 interface SettingsViewProps {
   onBack?: () => void;
   onLogout?: () => void;
 }
 
-// Mock 데이터
-const mockGenres = [
-  { id: 1, name: '발라드' },
-  { id: 2, name: 'R&B' },
-  { id: 3, name: '재즈' },
-  { id: 4, name: '팝' },
-  { id: 5, name: '록' },
-  { id: 6, name: '클래식' },
-  { id: 7, name: '힙합' },
-  { id: 8, name: '인디' },
-];
-
-const mockSecurityQuestions = [
-  { id: 1, questionText: '가장 좋아하는 음식은?' },
-  { id: 2, questionText: '첫 반려동물의 이름은?' },
-  { id: 3, questionText: '태어난 도시는?' },
-  { id: 4, questionText: '어릴 적 별명은?' },
-  { id: 5, questionText: '가장 좋아하는 영화는?' },
-];
-
 const characterInfo = importedCharacterInfo;
 type Character = CharacterType;
+
+function safeGet(key: string) {
+  try {
+    return typeof window !== "undefined" 
+      ? window.localStorage.getItem(key)
+      : null;
+  } catch (err) {
+    return null;
+  }
+}
 
 export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   const [currentView, setCurrentView] = useState<ViewType>('main');
 
   // Main Settings State
+  const [profileData, setProfileData] = useState({
+    email: '',
+    nickname: '',
+    character: 'PIANO',
+    birthDate: '',
+    hasProfileImage: false,
+    profileImageUrl: '',
+    genreIds: []
+  });
   const [dailyQuestion, setDailyQuestion] = useState(() => {
     const saved = localStorage.getItem('dailyQuestionEnabled');
     return saved !== null ? saved === 'true' : true;
@@ -119,42 +117,82 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
       window.removeEventListener('watchConnectionChanged', handleStorageChange);
     };
   }, []);
-
-  // Profile State - localStorage에서 불러오기
-  const [profileData, setProfileData] = useState(() => {
-    const saved = localStorage.getItem('profileData');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return {
-          email: 'soyeon@sote.app',
-          nickname: '소연',
-          character: 'PIANO' as Character,
-          birthDate: '2003-08-15',
-          hasProfileImage: false,
-          profileImageUrl: '',
-          genreIds: [1, 3, 5] as number[]
-        };
-      }
-    }
-    return {
-      email: 'soyeon@sote.app',
-      nickname: '소연',
-      character: 'PIANO' as Character,
-      birthDate: '2003-08-15',
-      hasProfileImage: false,
-      profileImageUrl: '',
-      genreIds: [1, 3, 5] as number[]
-    };
-  });
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // profileData 변경 시 localStorage에 저장
+  const [userInfo, setUserInfo] = useState(null);
+  const [genres, setGenres] = useState([]);
   useEffect(() => {
-    localStorage.setItem('profileData', JSON.stringify(profileData));
-  }, [profileData]);
+    const fetchData = async () => {
+      try {
+        const [profileRes, genreRes] = await Promise.all([
+          api.get('/api/users/profile'),
+          api.get('/api/genres'),
+        ]);
+        setUserInfo(profileRes.data);
+        setProfileData({
+          email: profileRes.data.email,
+          nickname: profileRes.data.nickname,
+          character: profileRes.data.character,
+          birthDate: profileRes.data.birthDate,
+          hasProfileImage: profileRes.data.hasProfileImage,
+          profileImageUrl: profileRes.data.profileImageUrl, 
+          genreIds: profileRes.data.musicPreferenceIds || [],
+        });
+        setGenres(genreRes.data);
+
+        if (profileRes.data.hasProfileImage) {
+          await fetchProfileImage();
+        }
+
+        const [notifRes, themeRes] = await Promise.all([
+          api.get('/api/settings/notifications'),
+          api.get('/api/settings/theme'),
+        ]);
+        const notifArray = notifRes.data.enabledNotifications || [];
+        setNotifications({
+          diary: notifArray.includes("DIARY"),
+          challenge: notifArray.includes("CHALLENGE"),
+          emotionDone: notifArray.includes("EMOTION_DONE"),
+          musicRecommend: notifArray.includes("MUSIC_RECOMMEND"),
+          weeklyStats: notifArray.includes("WEEKLY_STATS"),
+          reminderCustom: notifArray.includes("REMINDER_CUSTOM"),
+        });
+        if (typeof themeRes.data?.darkMode === "boolean") {
+          setTheme(themeRes.data.darkMode ? "dark" : "light");
+        }
+      } catch (error) {
+        console.error('사용자 정보 조회 실패:', error.response?.data || error.response || error.message);
+      }
+    };
+    fetchData();
+  }, [setTheme]);
+  const fetchProfileImage = async () => {
+    try {
+      const res = await api.get("/api/users/profile/image", { responseType: "arraybuffer" });
+      const base64 = btoa(
+        new Uint8Array(res.data).reduce(
+          (data, byte) => data + String.fromCharCode(byte),
+          ""
+        )
+      );
+      const contentType = res.headers["content-type"];
+      const finalUrl = `data:${contentType};base64,${base64}`;
+
+      setUserInfo(prev => ({
+        ...prev,
+        profileImage: finalUrl
+      }));
+
+      setProfileData(prev => ({
+        ...prev,
+        profileImageUrl: finalUrl,
+        hasProfileImage: true
+      }));
+    } catch (err) {
+      console.error("프로필 이미지 조회 실패", err);
+    }
+  };
   
   // Password change state
   const [showPasswordFields, setShowPasswordFields] = useState(false);
@@ -185,19 +223,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   useEffect(() => {
     localStorage.setItem('userKeywords', JSON.stringify(keywords));
   }, [keywords]);
-
-  // Account Recovery State
-  const [findEmailData, setFindEmailData] = useState({
-    nickname: '',
-    birthDate: '',
-    securityQuestionId: '',
-    securityAnswer: ''
-  });
-  const [resetTempData, setResetTempData] = useState({
-    email: '',
-    securityQuestionId: '',
-    securityAnswer: ''
-  });
 
   // Apply theme to document
   useEffect(() => {
@@ -269,13 +294,78 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
 
   const handleSaveProfile = async () => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      toast.success('프로필이 저장되었습니다.');
-      setCurrentView('main');
-    } catch (error) {
-      toast.error('프로필 저장에 실패했습니다.');
+      // 1️⃣ 비밀번호 변경 여부 확인
+      const isPasswordChanging =
+        passwordChangeData.currentPassword.trim() !== "" ||
+        passwordChangeData.newPassword.trim() !== "" ||
+        passwordChangeData.confirmPassword.trim() !== "";
+
+      if (isPasswordChanging) {
+        // 비밀번호 유효성 체크
+        if (passwordChangeData.newPassword.length < 8 ||
+            !/[!@#$%^&*(),.?":{}|<>]/.test(passwordChangeData.newPassword)) {
+          toast.error("새 비밀번호는 8자 이상 & 특수문자 1개 이상 포함해야 합니다.");
+          return;
+        }
+
+        if (passwordChangeData.newPassword !== passwordChangeData.confirmPassword) {
+          toast.error("새 비밀번호가 서로 일치하지 않습니다.");
+          return;
+        }
+
+        // 1차 비밀번호 변경 API 요청
+        await api.put("/api/users/password", {
+          oldPassword: passwordChangeData.currentPassword,
+          newPassword: passwordChangeData.newPassword,
+        });
+      }
+
+      // 2️⃣ 프로필 정보 업데이트
+      const payload = {
+        nickname: profileData.nickname,
+        character: profileData.character,
+        birthDate: profileData.birthDate,
+        genreIds: profileData.genreIds,
+      };
+
+      await api.put("/api/users/profile", payload);
+
+      // 3️⃣ 프로필 이미지 삭제 처리
+      if (!profileData.profileImageUrl && profileData.hasProfileImage === false) {
+        await api.delete("/api/users/profile/image");
+      }
+
+      // 4️⃣ 프로필 이미지 업로드 처리
+      if (profileImageFile) {
+        const form = new FormData();
+        form.append("image", profileImageFile);
+
+        await api.post("/api/users/profile/image", form, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      }
+
+      toast.success("프로필이 성공적으로 수정되었습니다!");
+      setCurrentView("main");
+
+    } catch (err) {
+      console.error("프로필 수정 실패:", err.response?.data || err.message);
+      toast.error("프로필 수정에 실패했습니다.");
     }
   };
+
+  useEffect(() => {
+    async function loadKeywords() {
+      try {
+        const res = await api.get("/api/users/keywords");
+        setKeywords(res.data);
+      } catch {
+        toast.error("키워드를 불러올 수 없어요.");
+      }
+    }
+
+    loadKeywords();
+  }, []);
 
   const handleAddKeyword = async () => {
     if (!newKeyword.trim()) {
@@ -293,33 +383,79 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
       return;
     }
 
-    const newId = Math.max(...keywords.map(k => k.id), 0) + 1;
-    setKeywords([...keywords, { id: newId, content: newKeyword.trim() }]);
-    setNewKeyword('');
-    toast.success('키워드가 추가되었습니다.');
+    try {
+      const res = await api.post("/api/users/keywords", {
+        content: newKeyword.trim()
+      });
+
+      setKeywords([...keywords, res.data]);
+      setNewKeyword('');
+      toast.success('키워드가 추가되었습니다.');
+    } catch {
+      toast.error("키워드를 추가하는데 실패했습니다.");
+    }
   };
 
   const handleDeleteKeyword = async (id: number) => {
+    await api.delete(`/api/users/keywords/${id}`);
     setKeywords(keywords.filter(k => k.id !== id));
-    toast.success('키워드가 삭제되었습니다.');
+    toast.success("키워드가 삭제되었습니다.");
   };
 
-  const handleFindEmail = async () => {
-    if (!findEmailData.nickname || !findEmailData.birthDate || !findEmailData.securityQuestionId || !findEmailData.securityAnswer) {
-      toast.error('필수 입력 항목입니다.');
-      return;
-    }
-    toast.success('등록된 이메일: s***n@sote.app');
-  };
+  // 알림 설정
+  useEffect(() => {
+    async function setupFCM() {
+      console.log("📌 FCM 설정 시작");
 
-  const handleResetTemp = async () => {
-    if (!resetTempData.email || !resetTempData.securityQuestionId || !resetTempData.securityAnswer) {
-      toast.error('필수 입력 항목입니다.');
-      return;
+      if (Notification.permission !== "granted") {
+        await Notification.requestPermission();
+      }
+
+      const token = await requestFcmToken();
+      console.log("📌 발급된 FCM Token:", token);
+
+      if (!token) {
+        console.warn("❌ 토큰 발급 실패");
+        return;
+      }
+
+      try {
+        await api.post("/api/settings/token", { token });
+        localStorage.setItem("fcmToken", token);
+      } catch (e) {
+      console.error("❌ 서버에 FCM 토큰 저장 실패:", e);
+      }
     }
-    toast.success('등록된 이메일로 임시 비밀번호를 보냈어요.');
-    setCurrentView('account-recovery');
-  };
+
+    setupFCM();
+
+    onForegroundMessage(payload => {
+      console.log("📩 앱 실행 중 메시지:", payload);
+
+      new Notification(payload.notification.title, {
+        body: payload.notification.body,
+        icon: "/icon.png"
+      });
+
+      toast.success(`🔔 ${payload.notification?.title}`);
+    });
+  }, []);
+  // FCM 알림 테스트용(코드 최하단부와 함께)
+  // useEffect(() => {
+  //   onForegroundMessage(payload => {
+  //     const userId = localStorage.getItem("user_id");
+  //     console.log("📩 앱 실행 중 메시지:", payload);
+  //     new Notification(payload.notification.title, {
+  //       body: payload.notification.body,
+  //       icon: "/icon.png"
+  //     });
+  //     toast.success(`🔔 ${payload.notification?.title}`);
+  //   });
+  // }, []);
+  // const userInfoRef = useRef(null);
+  // useEffect(() => {
+  //   userInfoRef.current = userInfo;
+  // }, [userInfo]);
 
   const handleDeleteAccount = async () => {
     toast.success('회원 탈퇴가 완료되었습니다.');
@@ -336,7 +472,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   };
 
   const getSelectedGenreNames = () => {
-    return profileData.genreIds.map(id => mockGenres.find(g => g.id === id)?.name || '').filter(Boolean).join(', ');
+    return profileData.genreIds.map(id => genres.find(g => g.id === id)?.name || '').filter(Boolean).join(', ');
   };
 
   // Health Data View
@@ -605,7 +741,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
               <p className="text-sm mb-2" style={{ color: '#4A3228' }}>선호하는 음악 장르</p>
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2">
-                  {mockGenres.slice(0, 4).map((genre) => (
+                  {genres.slice(0, 4).map((genre) => (
                     <Badge
                       key={genre.id}
                       variant={profileData.genreIds.includes(genre.id) ? 'default' : 'outline'}
@@ -622,7 +758,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {mockGenres.slice(4).map((genre) => (
+                  {genres.slice(4).map((genre) => (
                     <Badge
                       key={genre.id}
                       variant={profileData.genreIds.includes(genre.id) ? 'default' : 'outline'}
@@ -726,160 +862,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Find Email View
-  if (currentView === 'find-email') {
-    return (
-      <div className="min-h-screen p-4 space-y-4 bg-background">
-        <div className="flex items-center mb-4">
-          <Button variant="ghost" onClick={() => setCurrentView('profile')} className="-ml-2 gap-1">
-            <ArrowLeft className="w-4 h-4" />
-            뒤로
-          </Button>
-        </div>
-
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle>아이디 찾기</CardTitle>
-            <CardDescription>회원가입 시 입력한 정보를 입력해주세요</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>닉네임</p>
-              <Input
-                value={findEmailData.nickname}
-                onChange={(e) => setFindEmailData(prev => ({ ...prev, nickname: e.target.value }))}
-                placeholder="닉네임 입력"
-                className="border"
-                style={{ borderColor: '#E6E0D6' }}
-              />
-            </div>
-
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>생년월일</p>
-              <Input
-                type="date"
-                value={findEmailData.birthDate}
-                onChange={(e) => setFindEmailData(prev => ({ ...prev, birthDate: e.target.value }))}
-                className="border"
-                style={{ borderColor: '#E6E0D6' }}
-              />
-            </div>
-
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>보안 질문</p>
-              <Select
-                value={findEmailData.securityQuestionId}
-                onValueChange={(value) => setFindEmailData(prev => ({ ...prev, securityQuestionId: value }))}
-              >
-                <SelectTrigger className="border" style={{ borderColor: '#E6E0D6' }}>
-                  <SelectValue placeholder="보안 질문을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockSecurityQuestions.map((q) => (
-                    <SelectItem key={q.id} value={q.id.toString()}>
-                      {q.questionText}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>보안 답변</p>
-              <Input
-                value={findEmailData.securityAnswer}
-                onChange={(e) => setFindEmailData(prev => ({ ...prev, securityAnswer: e.target.value }))}
-                placeholder="보안 답변을 입력하세요"
-                className="border"
-                style={{ borderColor: '#E6E0D6' }}
-              />
-            </div>
-
-            <Button
-              onClick={handleFindEmail}
-              className="w-full text-white"
-              style={{ backgroundColor: '#7B8B4F' }}
-            >
-              아이디 찾기
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Reset Password View
-  if (currentView === 'reset-temp') {
-    return (
-      <div className="min-h-screen p-4 space-y-4 bg-background">
-        <div className="flex items-center mb-4">
-          <Button variant="ghost" onClick={() => setCurrentView('profile')} className="-ml-2 gap-1">
-            <ArrowLeft className="w-4 h-4" />
-            뒤로
-          </Button>
-        </div>
-
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <CardTitle>비밀번호 찾기</CardTitle>
-            <CardDescription>임시 비밀번호를 이메일로 받으실 수 있습니다</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>이메일</p>
-              <Input
-                type="email"
-                value={resetTempData.email}
-                onChange={(e) => setResetTempData(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="이메일을 입력하세요"
-                className="border"
-                style={{ borderColor: '#E6E0D6' }}
-              />
-            </div>
-
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>보안 질문</p>
-              <Select
-                value={resetTempData.securityQuestionId}
-                onValueChange={(value) => setResetTempData(prev => ({ ...prev, securityQuestionId: value }))}
-              >
-                <SelectTrigger className="border" style={{ borderColor: '#E6E0D6' }}>
-                  <SelectValue placeholder="보안 질문을 선택하세요" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockSecurityQuestions.map((q) => (
-                    <SelectItem key={q.id} value={q.id.toString()}>
-                      {q.questionText}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <p className="text-sm mb-2" style={{ color: '#4A3228' }}>보안 답변</p>
-              <Input
-                value={resetTempData.securityAnswer}
-                onChange={(e) => setResetTempData(prev => ({ ...prev, securityAnswer: e.target.value }))}
-                placeholder="보안 답변을 입력하세요"
-                className="border"
-                style={{ borderColor: '#E6E0D6' }}
-              />
-            </div>
-
-            <Button
-              onClick={handleResetTemp}
-              className="w-full text-white"
-              style={{ backgroundColor: '#7B8B4F' }}
-            >
-              임시 비밀번호 전송
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -1204,6 +1186,70 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+      {/* <Card className="bg-card border-border">
+        <CardContent className="p-5 space-y-3">
+          <h3 className="text-base leading-5 font-semibold text-foreground">
+            🔧 FCM 개발 테스트
+          </h3>
+
+          <Button
+            className="bg-primary text-white w-full"
+            onClick={async () => {
+              const token = await requestFcmToken();
+              console.log("📌 발급된 Token:", token);
+
+              if (token) {
+                localStorage.setItem("fcmToken", token);
+                await api.post("/api/settings/token", { token });
+                toast.success("FCM 토큰이 저장되었습니다!");
+              } else {
+                toast.error("토큰 발급 실패");
+              }
+            }}
+          >
+            FCM 토큰 발급 테스트
+          </Button>
+
+          <Button
+            className="bg-accent text-white w-full"
+            disabled={!userInfo}
+            onClick={async () => {
+              console.log("🔥 클릭됨 1");
+
+              // 항상 최신 userInfo 사용
+              const saved = safeGet("fcmToken");
+              const userId = localStorage.getItem("user_id");
+
+              console.log("📌 token:", saved);
+              console.log("📌 userId:", userId);
+
+              if (!saved) {
+                toast.error("저장된 FCM 토큰이 없습니다.");
+                return;
+              }
+
+              if (!userId) {
+                toast.error("userId가 준비되지 않았습니다.");
+                return;
+              }
+
+              try {
+                await api.post(`/api/settings/send`, null, {
+                  params: { userId, title: "테스트", body: "푸시 알림 테스트" }
+                });
+                toast.success("🔥 알림 보냄!");
+              } catch (e) {
+                console.error(e);
+                toast.error("전송 실패");
+              }
+
+              console.log("🔥 클릭됨 2");
+            }}
+          >
+            테스트 알림 보내기
+          </Button>
+        </CardContent>
+      </Card> */}
     </div>
   );
 }
