@@ -42,7 +42,7 @@ export function TextDiaryWrite({ onBack, onSave }: TextDiaryWriteProps) {
       setShowSuccessDialog(true);
       
       if (onSave) {
-        onSave(content);
+        onSave({ content });
       }
     } catch (error) {
       setIsSaving(false);

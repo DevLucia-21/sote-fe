@@ -64,7 +64,7 @@ export function ChallengeCard({ challenge, emotion, onAcceptChallenge, detailVie
           {/* Challenge Description - Beige Box */}
           <div className={`bg-secondary rounded-xl p-4 ${detailView ? '' : 'mb-4'}`}>
             <p className="text-sm text-center">
-              {challenge.description}
+              {challenge.content}
             </p>
           </div>
 

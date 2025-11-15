@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 type OCRTemplate = 'blank' | 'diary' | 'grid' | 'lined';
 
 interface HandwritingCanvasProps {
-  onSave?: (imageBlob: Blob, imageDataUrl: string) => void;
+  onSave?: (file: File) => void;
   template?: OCRTemplate;
 }
 
@@ -209,11 +209,12 @@ export function HandwritingCanvas({ onSave, template = 'blank' }: HandwritingCan
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const imageDataUrl = canvas.toDataURL('image/png');
-
     canvas.toBlob((blob) => {
       if (blob && onSave) {
-        onSave(blob, imageDataUrl);
+        const file = new File([blob], `handwriting-${Date.now()}.png`, {
+          type: 'image/png'
+        });
+        onSave(file);
       }
     }, 'image/png');
   };
