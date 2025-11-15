@@ -6,34 +6,59 @@ import { LPMonthlyView } from './lp/LPMonthlyView';
 import { LPDetailView } from './lp/LPDetailView';
 import { LPMusic, fetchWeeklyLP, fetchMonthlyLP } from './lp';
 
-// 주차 계산 함수
-function getWeekOfMonth(date: Date): number {
-  const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay();
-  const offsetDate = date.getDate() + firstDayOfWeek - 1;
-  return Math.ceil(offsetDate / 7);
+/* 💚 강제 KST 변환 함수 */
+function toKST(date: Date) {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000);
 }
 
-// 특정 년/월/주차의 시작일과 종료일 계산
-function getWeekRange(year: number, month: number, week: number): { start: Date; end: Date } {
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay();
-
-  // 주차의 시작일 계산
-  const startDay = (week - 1) * 7 - firstDayOfWeek + 1;
-  const start = new Date(year, month - 1, startDay);
-
-  // 주차의 종료일 계산
-  const endDay = startDay + 6;
-  const end = new Date(year, month - 1, endDay);
-
-  return { start, end };
+/* 💚 날짜 포맷(KST 기준) */
+function formatKST(date: Date) {
+  return toKST(date).toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
-// 날짜가 특정 주차에 속하는지 확인
-function isDateInWeek(date: Date, year: number, month: number, week: number): boolean {
-  const { start, end } = getWeekRange(year, month, week);
-  return date >= start && date <= end;
+function getISOWeek(date: Date) {
+  // UTC 그대로 사용 (절대 변환 금지)
+  const target = new Date(date);
+
+  const dayNr = (target.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  const firstThursdayDayNr = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - firstThursdayDayNr + 3);
+
+  const week =
+    1 + Math.round((target.getTime() - firstThursday.getTime()) / 604800000);
+
+  return { year: target.getFullYear(), week };
+}
+
+function getISOWeekRange(year: number, week: number) {
+  const simple = new Date(year, 0, 4 + (week - 1) * 7);
+  const dayNr = (simple.getDay() + 6) % 7;
+  const monday = new Date(simple);
+  monday.setDate(simple.getDate() - dayNr);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  // ISO는 UTC 기준, 표시할 때만 KST 변환
+  return { start: monday, end: sunday };
+}
+
+/* UI 표시용 (월 기준 주차) */
+function getDisplayWeekOfMonth(date: Date) {
+  const d = toKST(date);  // 💛 KST 기준
+  d.setDate(1);
+
+  const firstDay = d.getDay();
+  const offset = (firstDay + 6) % 7;
+
+  return Math.floor((toKST(date).getDate() + offset - 1) / 7) + 1;
 }
 
 export function MusicLP() {
@@ -43,80 +68,88 @@ export function MusicLP() {
   const [allMonthlyMusic, setAllMonthlyMusic] = useState<LPMusic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 주간/월간 네비게이션 상태
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  const iso = getISOWeek(currentDate);
+  const displayWeek = getDisplayWeekOfMonth(currentDate);
+
   const currentWeek = {
-    year: currentDate.getFullYear(),
-    month: currentDate.getMonth() + 1,
-    week: getWeekOfMonth(currentDate),
+    isoYear: iso.year,
+    isoWeek: iso.week,
+
+    displayYear: currentDate.getFullYear(),
+    displayMonth: currentDate.getMonth() + 1,
+    displayWeek,
   };
+
   const currentMonth = {
     year: currentDate.getFullYear(),
     month: currentDate.getMonth() + 1,
   };
 
-  // 데이터 로딩 (API 연동 시뮬레이션)
+  /* 데이터 로딩 */
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        // TODO: 실제 API 호출로 대체
-        // 주간/월간 데이터를 모두 로드 (실제 API에서는 범위별로 요청)
         const weekly = await fetchWeeklyLP();
         const monthly = await fetchMonthlyLP(currentMonth.year, currentMonth.month);
-        
-        // 주간과 월간 데이터를 모두 합쳐서 사용
+
         const allData = [...weekly, ...monthly];
 
         setAllWeeklyMusic(allData);
         setAllMonthlyMusic(allData);
       } catch (error) {
-        console.error('Failed to load LP data:', error);
+        console.error("Failed to load LP data:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 현재 주차에 해당하는 LP만 필터링
+
+  /* 주간 필터링 (ISO 기준) */
   const filteredWeeklyMusic = allWeeklyMusic.filter((music) => {
     const musicDate = new Date(music.rewardDate);
-    return isDateInWeek(musicDate, currentWeek.year, currentWeek.month, currentWeek.week);
+    const isoOfMusic = getISOWeek(musicDate);
+
+    return (
+      isoOfMusic.year === currentWeek.isoYear &&
+      isoOfMusic.week === currentWeek.isoWeek
+    );
   });
 
-  // 주차 변경
+  /* 주차 이동 */
   const handleWeekChange = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7));
-    setCurrentDate(newDate);
+    newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+    setCurrentDate(newDate); // KST 보정하지 않는다
   };
 
-  // 월 변경
+  /* 월 이동 */
   const handleMonthChange = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
     newDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1));
-    setCurrentDate(newDate);
+    setCurrentDate(newDate); // KST 보정하지 않는다
   };
 
-  // 주차 직접 선택
-  const handleWeekSelect = (year: number, month: number, week: number) => {
-    const newDate = new Date(year, month - 1, 1);
-    const firstDayOfWeek = newDate.getDay();
-    const targetDay = (week - 1) * 7 - firstDayOfWeek + 1;
-    newDate.setDate(targetDay + 3); // 주차의 중간쯤으로 설정
-    setCurrentDate(newDate);
+  /* 주차 선택 */
+  const handleWeekSelect = (isoYear: number, isoWeek: number) => {
+    const { start } = getISOWeekRange(isoYear, isoWeek);
+    const mid = new Date(start);
+    mid.setDate(start.getDate() + 3);
+    setCurrentDate(mid);
   };
 
-  // 월 직접 선택
+  /* 월 선택 */
   const handleMonthSelect = (year: number, month: number) => {
-    const newDate = new Date(year, month - 1, 15); // 해당 월의 15일로 설정
+    const newDate = new Date(year, month - 1, 15);
     setCurrentDate(newDate);
   };
 
-  // 상세 페이지 표시 (fixed overlay로)
+  /* 상세 페이지 */
   if (selectedMusic) {
     return (
       <div className="fixed inset-x-0 top-0 bottom-20 bg-background z-40 overflow-y-auto">
@@ -127,7 +160,6 @@ export function MusicLP() {
 
   return (
     <div className="p-4 space-y-4">
-      {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl flex items-center text-foreground">
           <Headphones className="w-6 h-6 mr-2" style={{ color: '#7B8B4F' }} />
@@ -144,11 +176,8 @@ export function MusicLP() {
         </Tabs>
       </div>
 
-      {/* 컨텐츠 */}
       {isLoading ? (
-        <div className="text-center py-12 text-muted-foreground">
-          로딩 중...
-        </div>
+        <div className="text-center py-12 text-muted-foreground">로딩 중...</div>
       ) : (
         <>
           {selectedPeriod === 'week' && (
@@ -160,6 +189,7 @@ export function MusicLP() {
               onDateSelect={handleWeekSelect}
             />
           )}
+
           {selectedPeriod === 'month' && (
             <LPMonthlyView
               musicList={allMonthlyMusic}

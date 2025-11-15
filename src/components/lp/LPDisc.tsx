@@ -27,6 +27,8 @@ export function LPDisc({
 }: LPDiscProps) {
   const sizes = sizeMap[size];
 
+  console.log("🎨 LPDisc emotionColor:", emotionColor);
+
   return (
     <motion.div
       animate={isPlaying ? { rotate: 360 } : { rotate: 0 }}
@@ -65,9 +67,19 @@ export function LPDisc({
         {/* 중앙 라벨 - 앨범 커버 이미지 */}
         <div
           className={`${sizes.center} rounded-full flex items-center justify-center z-10 overflow-hidden`}
-          style={{ backgroundColor: '#5D3F35' }}
+          style={{ backgroundColor: 'transparent' }}
         >
-          <img src={albumImageUrl} alt={title} className="w-full h-full object-cover" />
+          {albumImageUrl ? (
+            <img
+              src={albumImageUrl || ''}    // null이면 빈 값 전달
+              alt={title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // 이미지 깨지면 숨김 → 완전 투명
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          ) : null}
         </div>
 
         {/* 회전 애니메이션 표시 */}
