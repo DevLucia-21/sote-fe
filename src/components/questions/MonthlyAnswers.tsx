@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -6,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ChevronLeft, ChevronRight, Loader2, AlertCircle, Eye, Edit, ArrowLeft, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { Answer } from './types';
-import { MOCK_QUESTIONS, getMockAnswer, saveMockAnswer } from './mockData';
 import { AnswerDetail } from './AnswerDetail';
 import { DayAnswerHistory } from './DayAnswerHistory';
 
@@ -63,47 +63,46 @@ export function MonthlyAnswers({ onBack }: MonthlyAnswersProps = {}) {
 
   const loadMonthlyAnswers = async () => {
     setStatus('loading');
+    
     try {
-      // Mock API: GET /api/questions/answers/me?month=yyyy-MM
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Mock: 랜덤으로 일부 날짜에 답변 생성
-      const mockAnswers: Answer[] = [];
-      const randomDays = [3, 7, 10, 15, 20, 25];
-      
-      randomDays.forEach(day => {
-        const question = MOCK_QUESTIONS.find(q => q.questionDay === day);
-        if (question) {
-          const answerText = getMockAnswer(day, selectedMonth);
-          mockAnswers.push({
-            id: Math.floor(Math.random() * 10000),
-            questionId: question.id,
-            questionContent: question.content,
-            questionDay: question.questionDay,
-            answerText: answerText,
-            answeredAt: new Date(selectedMonth + `-${String(day).padStart(2, '0')}T14:30:00+09:00`).toISOString(),
-            answerMonth: selectedMonth + '-01',
-          });
-        }
+      const res = await api.get("/api/questions/answers/me", {
+        params: { month: selectedMonth }
       });
 
-      // 1~31일 모든 아이템 생성
-      const items: MonthlyAnswerItem[] = MOCK_QUESTIONS.map(question => {
-        const answer = mockAnswers.find(a => a.questionDay === question.questionDay);
+      const data = res.data ?? [];
+
+      // 🔥 FE에서 hasAnswer를 answerId 기준으로 재정의
+      const processed = data.map((item: any) => {
+        const hasAnswer =
+          item.answerId !== null &&
+          item.answerId !== undefined &&
+          item.answerText !== undefined;
+
         return {
-          questionDay: question.questionDay,
-          questionContent: question.content,
-          answer,
-          hasAnswer: !!answer,
+          questionDay: item.questionDay,
+          questionContent: item.questionContent,
+          hasAnswer,
+          answer: hasAnswer
+            ? {
+                answerId: item.answerId,
+                answerText: item.answerText,
+                answeredAt: item.answeredAt,
+                questionId: item.questionId,
+                questionDay: item.questionDay,
+                questionContent: item.questionContent,
+                date: item.date
+              }
+            : null
         };
       });
 
-      setMonthlyItems(items);
-      setStatus(mockAnswers.length > 0 ? 'success' : 'empty');
+      setMonthlyItems(processed);
+      setStatus('success');
+
     } catch (error) {
-      console.error('월별 답변 로딩 실패:', error);
+      console.error("월별 답변 로딩 실패:", error);
       setStatus('error');
-      toast.error('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
+      toast.error("지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.");
     }
   };
 
