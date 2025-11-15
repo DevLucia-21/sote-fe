@@ -1,25 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import api from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { ArrowLeft, Calendar } from 'lucide-react';
 import { EmotionChip } from './EmotionChip';
 import { Progress } from '../ui/progress';
 
-interface ChallengeData {
+interface ChallengeDetail {
+  id: number;
   date: string;
   emotionType: 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE';
   emotionLabel: string;
   category: string;
   content: string;
-  progress: number;
+  completed: boolean;
+  completedAt?: string;
 }
 
 interface ChallengeDayDetailProps {
-  challenge: ChallengeData;
+  challengeId: number;
   onBack: () => void;
 }
 
-export function ChallengeDayDetail({ challenge, onBack }: ChallengeDayDetailProps) {
+export function ChallengeDayDetail({ challengeId, onBack }: ChallengeDayDetailProps) {
+  const [detail, setDetail] = useState<ChallengeDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    console.log("받은 id:", challengeId);
+    
+    const fetchDetail = async () => {
+      try {
+        const res = await api.get(`/api/challenge/history/${challengeId}`);
+        setDetail(res.data);
+      } catch (err) {
+        console.error("❌ 상세 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDetail();
+  }, [challengeId]);
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const year = date.getFullYear();
@@ -30,6 +53,14 @@ export function ChallengeDayDetail({ challenge, onBack }: ChallengeDayDetailProp
     
     return `${year}년 ${month}월 ${day}일 (${dayName})`;
   };
+
+  if (loading || !detail) {
+    return (
+      <div className="p-4 text-center text-muted-foreground">
+        불러오는 중...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 bg-background">
@@ -48,7 +79,7 @@ export function ChallengeDayDetail({ challenge, onBack }: ChallengeDayDetailProp
         <CardContent className="p-4 flex items-center gap-2">
           <Calendar className="w-4 h-4 text-primary" />
           <span className="text-sm text-foreground">
-            {formatDate(challenge.date)}
+            {formatDate(detail.date)}
           </span>
         </CardContent>
       </Card>
@@ -61,61 +92,55 @@ export function ChallengeDayDetail({ challenge, onBack }: ChallengeDayDetailProp
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* 챌린지 내용 상자 */}
-          <div
-            className="p-5 rounded-xl text-center space-y-4 bg-card border border-border"
-          >
-            {/* 감정/카테고리 태그 */}
+          <div className="p-5 rounded-xl text-center space-y-4 bg-card border border-border">
+            
+            {/* 감정 / 카테고리 */}
             <div className="flex items-center justify-center gap-2">
-              <EmotionChip emotion={challenge.emotionType} />
-              <span
-                className="px-3 py-1 rounded-full text-sm bg-accent text-white"
-              >
-                {challenge.category}
+              <EmotionChip emotion={detail.emotionType} />
+              <span className="px-3 py-1 rounded-full text-sm bg-accent text-white">
+                {detail.category}
               </span>
             </div>
 
-            {/* 챌린지 내용 */}
+            {/* 내용 */}
             <p className="leading-relaxed text-foreground text-lg">
-              {challenge.content}
+              {detail.content}
             </p>
 
-            {/* 구분선 */}
             <div className="w-full h-px bg-border" />
 
-            {/* 진행률 섹션 (읽기 전용) */}
+            {/* 완료 여부 */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">
-                  진행률
+                  완료 여부
                 </span>
-                <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    challenge.progress === 100 
-                      ? 'bg-primary text-white' 
-                      : 'bg-muted text-foreground'
-                  }`}
-                >
-                  {challenge.progress}%
-                </span>
+
+                {detail.completed ? (
+                  <span className="px-3 py-1 rounded-full text-sm bg-primary text-white">
+                    완료됨
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 rounded-full text-sm bg-muted text-foreground">
+                    미완료
+                  </span>
+                )}
               </div>
-              <Progress value={challenge.progress} className="h-2" />
+
+              {/* 진행 표시 (completed이면 100%) */}
+              <Progress value={detail.completed ? 100 : 0} className="h-2" />
             </div>
           </div>
 
-          {/* 완료 상태 안내 */}
+          {/* 완료 메시지 */}
           <div className="text-center">
-            {challenge.progress === 100 ? (
-              <div
-                className="px-4 py-3 rounded-lg bg-primary text-white"
-              >
-                <p className="text-sm">✨ 챌린지를 완료했어요!</p>
+            {detail.completed ? (
+              <div className="px-4 py-3 rounded-lg bg-primary text-white">
+                <p className="text-sm">✨ 이 날의 챌린지를 완료했어요!</p>
               </div>
             ) : (
-              <div
-                className="px-4 py-3 rounded-lg bg-muted text-muted-foreground"
-              >
-                <p className="text-sm">이 날의 챌린지는 {challenge.progress}% 진행했어요</p>
+              <div className="px-4 py-3 rounded-lg bg-muted text-muted-foreground">
+                <p className="text-sm">이 날의 챌린지는 미완료 상태예요.</p>
               </div>
             )}
           </div>

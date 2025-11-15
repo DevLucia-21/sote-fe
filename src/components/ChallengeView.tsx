@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -20,16 +21,90 @@ type ViewMode = 'main' | 'badges' | 'lp-reward' | 'monthly-challenge';
 export function ChallengeView() {
   const [currentView, setCurrentView] = useState<ViewMode>('main');
   const [progress, setProgress] = useState<number>(0);
-  
-  // 더미 챌린지 데이터
-  const dummyChallenge = {
-    id: 1,
-    content: '500보 이상 산책하기',
-    emotionType: 'SADNESS' as const,
-    category: '운동',
+  const [todayChallenge, setTodayChallenge] = useState<any>(null);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [musicData, setMusicData] = useState(null);
+
+  /** 🔥 오늘의 챌린지 불러오기 */
+  useEffect(() => {
+    const fetchTodayChallenge = async () => {
+      try {
+        const res = await api.get('/api/challenge/status');
+        setTodayChallenge(res.data);
+
+        if (res.data.completed) {
+          setProgress(100);
+          setIsCompleted(true);
+        }
+      } catch (e) {
+        toast.error('오늘의 챌린지를 가져오지 못했어요.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTodayChallenge();
+  }, []);
+
+  useEffect(() => {
+    const fetchTodayMusic = async () => {
+      try {
+        const res = await api.get("/api/lp/today");
+
+        // 백엔드 응답 형태 그대로 담아줌
+        setMusicData({
+          title: res.data.title,
+          artist: res.data.artist,
+          albumImageUrl: res.data.albumImageUrl,
+          reason: res.data.reason || res.data.description || "",
+          playUrl: res.data.playUrl,
+        });
+
+        console.log("🔧 인터셉터 적용 후 res:", res);
+
+      } catch (err) {
+        console.error("❌ 오늘의 LP 음악 로딩 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTodayMusic();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-4">
+        <p className="text-center text-muted-foreground">불러오는 중...</p>
+      </div>
+    );
+  }
+
+  /** 🔥 챌린지 완료 처리 */
+  const handleCompleteChallenge = async () => {
+    if (!todayChallenge?.challengeId) {
+      toast.error("오늘의 챌린지가 존재하지 않아요.");
+      return;
+    }
+
+    try {
+      const res = await api.post(`/api/challenge/${todayChallenge.challengeId}/complete`);
+
+      toast.success("오늘의 챌린지를 완료했어요! 🎉");
+
+      setProgress(100);
+      setIsCompleted(true);
+
+      // 완료 후 LP 보상 화면으로 이동
+      setCurrentView('lp-reward');
+
+    } catch (err) {
+      console.error("❌ 챌린지 완료 처리 실패:", err);
+      toast.error("챌린지 완료에 실패했어요. 다시 시도해주세요.");
+    }
   };
 
-  // 메인 화면 (원래 버전 레이아웃)
+  // 메인 화면
   if (currentView === 'main') {
     return (
       <div className="p-4 space-y-6">
@@ -76,80 +151,94 @@ export function ChallengeView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* 챌린지 내용 상자 - 통합 */}
-            <div 
-              className="p-4 md:p-5 rounded-xl text-center space-y-3 md:space-y-4 bg-card border border-border"
-            >
-              {/* 감정/카테고리 태그 */}
-              <div className="flex items-center justify-center gap-2">
-                <EmotionChip emotion={dummyChallenge.emotionType} />
-                <span
-                  className="px-2.5 md:px-3 py-1 rounded-full text-xs md:text-sm bg-accent text-white"
-                >
-                  {dummyChallenge.category}
-                </span>
-              </div>
-              
-              {/* 챌린지 내용 */}
-              <p
-                className="leading-relaxed text-foreground text-base md:text-lg lg:text-xl"
-              >
-                {dummyChallenge.content}
+            {/* 🔥 오늘의 챌린지가 없는 경우 */}
+            {!todayChallenge?.challengeId && (
+              <p className="text-center text-muted-foreground text-base md:text-lg py-6">
+                아직 오늘의 챌린지가 준비되지 않았어요 😊<br />
+                일기를 작성해주세요!
               </p>
+            )}
 
-              {/* 구분선 */}
+            {/* 챌린지 내용 상자 - 통합 */}
+            {todayChallenge?.challengeId && (
               <div 
-                className="w-full h-px bg-border"
-              />
-
-              {/* 진행률 섹션 */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    진행률
-                  </span>
+                className="p-4 md:p-5 rounded-xl text-center space-y-3 md:space-y-4 bg-card border border-border"
+              >
+                {/* 감정/카테고리 태그 */}
+                <div className="flex items-center justify-center gap-2">
+                  <EmotionChip emotion={(todayChallenge.emotionType as any) || 'JOY'} />
                   <span
-                    className={`px-3 py-1 rounded-full text-sm ${
-                      progress === 100 
-                        ? 'bg-primary text-white' 
-                        : 'bg-muted text-foreground'
-                    }`}
+                    className="px-2.5 md:px-3 py-1 rounded-full text-xs md:text-sm bg-accent text-white"
                   >
-                    {progress}%
+                    {todayChallenge.category}
                   </span>
                 </div>
-                <Slider
-                  value={[progress]}
-                  onValueChange={(value) => {
-                    setProgress(value[0]);
-                    if (value[0] === 100 && progress !== 100) {
-                      toast.success('챌린지 100% 달성! 완료 버튼을 눌러주세요 🎉');
-                    }
-                  }}
-                  max={100}
-                  step={10}
-                  className="w-full"
-                />
-              </div>
-            </div>
+                
+                {/* 챌린지 내용 */}
+                <p
+                  className="leading-relaxed text-foreground text-base md:text-lg lg:text-xl"
+                >
+                  {todayChallenge.content}
+                </p>
 
+                {/* 구분선 */}
+                <div 
+                  className="w-full h-px bg-border"
+                />
+
+                {/* 진행률 섹션 */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      진행률
+                    </span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-sm ${
+                        progress === 100 
+                          ? 'bg-primary text-white' 
+                          : 'bg-muted text-foreground'
+                      }`}
+                    >
+                      {progress}%
+                    </span>
+                  </div>
+                  <Slider
+                    value={[progress]}
+                    disabled={isCompleted}
+                    onValueChange={(value) => {
+                      setProgress(value[0]);
+                      if (value[0] === 100 && progress !== 100) {
+                        toast.success('챌린지 100% 달성! 완료 버튼을 눌러주세요 🎉');
+                      }
+                    }}
+                    max={100}
+                    step={10}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
             {/* 버튼 */}
             <Button
+              disabled={progress < 100 || isCompleted}
+              onClick={handleCompleteChallenge}
               className={`w-full ${
-                progress === 100 
-                  ? 'bg-primary text-white hover:bg-primary/90' 
+                isCompleted
+                  ? 'bg-muted text-muted-foreground opacity-60'
+                  : progress === 100
+                  ? 'bg-primary text-white hover:bg-primary/90'
                   : 'bg-muted text-muted-foreground opacity-60'
               }`}
-              onClick={() => setCurrentView('lp-reward')}
-              disabled={progress < 100}
             >
-              {progress === 100 ? (
+              {isCompleted ? (
+                "이미 완료된 챌린지"
+              ) : progress === 100 ? (
                 <span className="flex items-center justify-center gap-2">
                   <CheckCircle2 size={16} />
                   완료
                 </span>
               ) : (
-                '진행률 100% 달성 후 확인 가능'
+                "진행률 100% 달성 후 확인 가능"
               )}
             </Button>
           </CardContent>
@@ -190,7 +279,10 @@ export function ChallengeView() {
 
   // LP 보상 화면
   if (currentView === 'lp-reward') {
-    return <LPRewardView onClose={() => setCurrentView('main')} />;
+    return <LPRewardView
+      onClose={() => setCurrentView('main')}
+      music={musicData}
+    />;
   }
 
   return null;
