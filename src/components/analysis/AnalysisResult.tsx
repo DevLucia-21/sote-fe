@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../../services/api'
 import { motion } from 'motion/react';
 import { EmotionCard } from './EmotionCard';
 import { MusicCard } from './MusicCard';
@@ -17,24 +18,34 @@ interface AnalysisResultProps {
 
 export function AnalysisResult({
   result,
-  instrument = 'piano',
   onAcceptChallenge,
-  characterType = 'PIANO',
   onBack,
 }: AnalysisResultProps) {
   
-  console.group("🔍 [AnalysisResult Debug]");
-  console.log("📌 전달된 result 객체:", result);
-  console.log("📌 result.date:", result?.date);
-  console.log("📌 result.emotion:", result?.emotion);
-  console.log("📌 result.confidence:", result?.confidence);
-  console.log("📌 result.reason:", result?.reason);
-  console.log("📌 result.description:", result?.description);
-  console.log("📌 result.music:", result?.music);
-  console.log("📌 result.challenge:", result?.challenge);
-  console.groupEnd();
+  const [instrument, setInstrument] = useState<InstrumentType>('piano');
+  const [characterType, setCharacterType] = useState<CharacterType>('PIANO');
 
   const [showToast, setShowToast] = useState(true);
+  
+  // 🔥 프로필에서 캐릭터 가져오기
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await api.get("/api/users/profile");
+        const char = res.data.character || "PIANO";
+
+        setCharacterType(char.toUpperCase() as CharacterType);
+        setInstrument(char.toLowerCase() as InstrumentType);
+
+        console.log("🎵 프로필에서 가져온 instrument:", char.toLowerCase());
+        console.log("🎨 프로필에서 가져온 characterType:", char.toUpperCase());
+      } catch (err) {
+        console.error("❌ 프로필 불러오기 실패:", err);
+      }
+    };
+
+    loadProfile();
+  }, []);
 
   // Show completion toast on mount
   useState(() => {

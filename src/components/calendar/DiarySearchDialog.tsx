@@ -1,3 +1,4 @@
+// 🔥 mockDiaryData 제거, 실제 API 기반 검색 버전
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Search, Calendar as CalendarIcon, X } from 'lucide-react';
@@ -5,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
-import { mockDiaryData } from './mockData';
+import api from '../../services/api';
 import { DiaryEntry } from './types';
 import { emotionColors, getEmotionLabel } from './noteMapping';
 
@@ -22,28 +23,45 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
   const [searchResults, setSearchResults] = useState<DiaryEntry[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
 
-  const handleSearch = () => {
+  /** 🔥 API 기반 검색 함수 */
+  const handleSearch = async () => {
     setHasSearched(true);
-    
-    let results = mockDiaryData;
 
-    // 키워드 검색 (이지모드에서는 키워드가 없으므로 내용만 검색)
-    if (keyword.trim()) {
-      results = results.filter(diary => {
-        const keywordLower = keyword.toLowerCase();
-        const contentMatch = diary.content?.toLowerCase().includes(keywordLower);
-        // 이지모드가 아닐 때만 키워드 매칭 체크
-        const keywordsMatch = !isEasyMode && diary.keywords?.some(k => k.toLowerCase().includes(keywordLower));
-        return contentMatch || keywordsMatch;
-      });
+    try {
+      let results: DiaryEntry[] = [];
+
+      // 1) 날짜 검색
+      if (dateSearch) {
+        const res = await api.get("/api/diaries", {
+          params: { date: dateSearch }
+        });
+        if (res.data) results.push(res.data);
+      }
+
+      // 2) 키워드 검색
+      if (keyword.trim()) {
+        const res = await api.get(`/api/diaries/keyword/search`, {
+          params: { keyword }
+        });
+        if (res.data) results = [...results, ...res.data];
+      }
+
+      // 🔥 이지모드에서는 내용 검색 ❌, 키워드로만 검색 ⭕
+      if (keyword.trim() && isEasyMode) {
+        const k = keyword.toLowerCase();
+        results = results.filter((diary) =>
+          diary.keywords?.some((kw) => kw.toLowerCase().includes(k))
+        );
+      }
+
+      // 3) 중복 제거 (날짜 검색 + 키워드 검색이 겹칠 수 있음)
+      const unique = Array.from(new Map(results.map(d => [d.date, d])).values());
+
+      setSearchResults(unique);
+    } catch (error) {
+      console.error("검색 오류:", error);
+      setSearchResults([]);
     }
-
-    // 날짜 검색
-    if (dateSearch) {
-      results = results.filter(diary => diary.date.includes(dateSearch));
-    }
-
-    setSearchResults(results);
   };
 
   const handleReset = () => {
@@ -67,9 +85,6 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
             <Search className="w-5 h-5" />
             일기 검색
           </DialogTitle>
-          <DialogDescription className="text-[#4A3228] opacity-60">
-            키워드나 날짜로 일기를 검색할 수 있습니다.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
@@ -78,25 +93,26 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
             <div>
               <label className="text-sm text-[#4A3228] mb-1.5 block">키워드 검색</label>
               <Input
-                placeholder="일기 내용이나 키워드 입력..."
+                placeholder="키워드 입력..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSearch();
-                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 className="border-[#E5E5E5]"
               />
             </div>
 
-            <div>
-              <label className="text-sm text-[#4A3228] mb-1.5 block">날짜 검색</label>
-              <Input
-                type="date"
-                value={dateSearch}
-                onChange={(e) => setDateSearch(e.target.value)}
-                className="border-[#E5E5E5]"
-              />
-            </div>
+            {/* 날짜 검색 (이지모드에서는 숨김) */}
+            {!isEasyMode && (
+              <div>
+                <label className="text-sm text-[#4A3228] mb-1.5 block">날짜 검색</label>
+                <Input
+                  type="date"
+                  value={dateSearch}
+                  onChange={(e) => setDateSearch(e.target.value)}
+                  className="border-[#E5E5E5]"
+                />
+              </div>
+            )}
           </div>
 
           {/* 검색 버튼 */}
@@ -104,19 +120,13 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
             <Button
               onClick={handleSearch}
               className="flex-1"
-              style={{
-                backgroundColor: '#7B8B4F',
-                color: '#FFFFFF',
-              }}
+              style={{ backgroundColor: '#7B8B4F', color: '#FFFFFF' }}
             >
               <Search className="w-4 h-4 mr-2" />
               검색
             </Button>
-            <Button
-              onClick={handleReset}
-              variant="outline"
-              className="px-4"
-            >
+
+            <Button onClick={handleReset} variant="outline">
               <X className="w-4 h-4" />
             </Button>
           </div>
@@ -124,11 +134,9 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
           {/* 검색 결과 */}
           {hasSearched && (
             <div className="mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm text-[#4A3228]">
-                  검색 결과 {searchResults.length}개
-                </h4>
-              </div>
+              <h4 className="text-sm text-[#4A3228] mb-3">
+                검색 결과 {searchResults.length}개
+              </h4>
 
               {searchResults.length === 0 ? (
                 <div className="text-center py-12 text-[#4A3228] opacity-60">
@@ -137,7 +145,6 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
               ) : (
                 <div className="space-y-3">
                   {searchResults.map((diary, index) => {
-                    const emotionLabel = getEmotionLabel(diary.emotion);
                     const color = emotionColors[diary.emotion];
 
                     return (
@@ -149,54 +156,26 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
                       >
                         <Card
                           className="p-4 cursor-pointer hover:shadow-md transition-shadow border-none"
-                          style={{ backgroundColor: '#FFFFFF' }}
                           onClick={() => handleSelectDiary(diary)}
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <CalendarIcon className="w-4 h-4" style={{ color: '#7B8B4F' }} />
                               <span className="text-sm" style={{ color: '#7B8B4F' }}>
-                                {new Date(diary.date).toLocaleDateString('ko-KR', {
-                                  year: 'numeric',
-                                  month: 'long',
-                                  day: 'numeric',
-                                })}
+                                {new Date(diary.date).toLocaleDateString('ko-KR')}
                               </span>
                             </div>
+
                             <div
                               className="px-2 py-1 rounded-full text-xs"
-                              style={{
-                                backgroundColor: color + '20',
-                                color: color,
-                              }}
+                              style={{ backgroundColor: color + '20', color }}
                             >
-                              {emotionLabel}
+                              {getEmotionLabel(diary.emotion)}
                             </div>
                           </div>
 
-                          {/* 키워드 - 이지모드가 아닐 때만 표시 */}
-                          {!isEasyMode && diary.keywords && diary.keywords.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-2">
-                              {diary.keywords.map((kw, idx) => (
-                                <span
-                                  key={idx}
-                                  className="px-2 py-0.5 rounded-full text-xs"
-                                  style={{
-                                    backgroundColor: '#F5F1E8',
-                                    color: '#4A3228',
-                                  }}
-                                >
-                                  #{kw}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* 내용 미리보기 */}
-                          <p
-                            className="text-sm line-clamp-2"
-                            style={{ color: '#4A3228', opacity: 0.8 }}
-                          >
+                          {/* 내용 */}
+                          <p className="text-sm line-clamp-2" style={{ color: '#4A3228', opacity: 0.8 }}>
                             {diary.content}
                           </p>
                         </Card>

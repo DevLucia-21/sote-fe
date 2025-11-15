@@ -20,8 +20,6 @@ export function MusicCard({ music, emotion, detailView = false }: MusicCardProps
   useEffect(() => {
     api.get("/api/lp/today")
       .then(res => {
-        console.log("🎵 /api/lp/today 응답:", res.data);
-        console.log("👉 API raw response:", res);
         setLpToday(res.data);
       })
       .catch(err => console.error(err));

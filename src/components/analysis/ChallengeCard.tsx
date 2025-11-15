@@ -1,3 +1,4 @@
+import api from '../../services/api'
 import { motion } from 'motion/react';
 import { Target, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { Card } from '../ui/card';

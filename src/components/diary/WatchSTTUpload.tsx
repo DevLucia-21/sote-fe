@@ -155,7 +155,7 @@ export function WatchSTTUpload({ onBack, onComplete }: WatchSTTUploadProps) {
       case 'transcribing':
         return {
           icon: <FileAudio className="w-12 h-12 animate-pulse" style={{ color: '#7B8B4F' }} />,
-          title: '음성 전사 중...',
+          title: '음성 변환 중...',
           description: '오디오를 텍스트로 변환하고 있습니다.'
         };
       case 'saving':
@@ -383,7 +383,7 @@ export function WatchSTTUpload({ onBack, onComplete }: WatchSTTUploadProps) {
               </div>
               <div className="w-8 h-px bg-gray-300" />
               <div className={`flex-1 text-center ${step === 'transcribing' || step === 'saving' || step === 'success' ? 'text-[#7B8B4F]' : 'text-gray-400'}`}>
-                <p>2. 전사</p>
+                <p>2. 변환</p>
               </div>
               <div className="w-8 h-px bg-gray-300" />
               <div className={`flex-1 text-center ${step === 'saving' || step === 'success' ? 'text-[#7B8B4F]' : 'text-gray-400'}`}>
