@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import * as Tone from "tone";
+import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
 import { Skeleton } from './ui/skeleton';
 import {
@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { MonthlyAnswers } from './questions/MonthlyAnswers';
-import { MusicalNote } from './calendar/MusicalNote';
+import { NoteHead } from './calendar/NoteHead';
 import { notePositions, emotionColors, getStemDirection } from './calendar/noteMapping';
 import { HealthStatsTab } from './statistics/HealthStatsTab';
 import { 
@@ -39,6 +39,7 @@ import {
   Sparkles,
   Trophy
 } from 'lucide-react';
+import { get } from 'http';
 
 // ========== API Response Types ==========
 
@@ -49,22 +50,10 @@ interface CalendarNoteDto {
   score: number;
 }
 
-interface KeywordRankingResponse {
-  rankings: Array<{ keyword: string; count: number }>;
-}
-
 interface ChallengeCompletionResponse {
-  total: number;
-  completed: number;
-  rate: number;
-}
-
-interface AnalysisStatsResponse {
-  distribution: { [emotionLabel: string]: number };
-}
-
-interface ChallengeEmotionPerformanceResponse {
-  stats: { [emotionType: string]: number };
+  totalChallenges: number;
+  completedChallenges: number;
+  completionRate: number;
 }
 
 interface MusicStatsResponse {
@@ -89,8 +78,49 @@ interface MoodRankingResponse {
   angerKeywords: MoodRankingItem[];
 }
 
-interface KeywordEmotionMappingResponse {
-  mappings: Array<{ keyword: string; emotions: Record<string, number> }>;
+function normalize(dateStr: string) {
+  // dateStr이 "2025-11-10" 또는 "2025-11-10T14:00:00" 모두 지원
+  const [y, m, d] = dateStr.split("T")[0].split("-");
+  return `${y}-${m}-${d}`;
+}
+
+function getSunday(date: Date) {
+  // 1) 입력 날짜를 KST로 변환
+  const local = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+
+  // 2) 요일 (0=일요일, 1=월요일...)
+  const day = local.getDay();
+
+  // 3) local 기준 일요일 찾기
+  const sunday = new Date(local);
+  sunday.setDate(local.getDate() - day);
+
+  // 4) 다시 UTC 시간으로 되돌려 return
+  return new Date(sunday.getTime() - 9 * 60 * 60 * 1000);
+}
+
+function computeCurrentWeek(baseDate: Date) {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth() + 1;
+
+  // baseDate가 포함된 주의 일요일 계산
+  const day = baseDate.getDay(); // 0=일요일
+  const sunday = getSunday(baseDate);
+  sunday.setDate(baseDate.getDate() - day);
+
+  // 이번 달 1일
+  const firstDayOfMonth = new Date(year, month - 1, 1);
+  const firstDayWeekday = firstDayOfMonth.getDay();
+
+  // 월 1일이 포함된 주의 일요일
+  const firstWeekSunday = new Date(firstDayOfMonth);
+  firstWeekSunday.setDate(firstDayOfMonth.getDate() - firstDayWeekday);
+
+  // 주차 계산
+  const diff = Math.floor((sunday.getTime() - firstWeekSunday.getTime()) / (1000 * 60 * 60 * 24));
+  const week = Math.floor(diff / 7) + 1;
+
+  return { year, month, week };
 }
 
 // ========== Mapping Constants ==========
@@ -111,12 +141,19 @@ const emotionNames = {
   APATHY: '무기력'
 };
 
-const emotionColorMap = {
-  JOY: '#FFE080',
-  SADNESS: '#90C8FF',
-  ANGER: '#FFA0A0',
-  SENSITIVE: '#C4B0FF',
-  APATHY: '#C8C8C8'
+const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
+  '기쁨': 'JOY',
+  '슬픔': 'SADNESS',
+  '분노': 'ANGER',
+  '예민': 'SENSITIVE',
+  '무기력': 'APATHY',
+
+  // 영어 감정도 지원하도록 추가
+  'JOY': 'JOY',
+  'SADNESS': 'SADNESS',
+  'ANGER': 'ANGER',
+  'SENSITIVE': 'SENSITIVE',
+  'APATHY': 'APATHY',
 };
 
 const emotionColorClasses = {
@@ -128,6 +165,21 @@ const emotionColorClasses = {
 };
 
 const dayOfWeekNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+function getWeekDateListByBase(baseDate: Date) {
+  const sunday = getSunday(baseDate);
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
+
+    // 로컬 날짜로 반환 (toISOString 쓰지 말 것!)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  });
+}
 
 const INSTRUMENT_MAP = {
   piano: "acoustic_grand_piano-mp3",
@@ -170,9 +222,7 @@ export function StatisticsView() {
   
   const today = new Date();
   const [currentWeek, setCurrentWeek] = useState({
-    year: today.getFullYear(),
-    month: today.getMonth() + 1,
-    week: Math.ceil(today.getDate() / 7)
+    baseDate: today   // 기준 날짜(어떤 날짜든 상관 없음)
   });
   const [currentMonth, setCurrentMonth] = useState({
     year: today.getFullYear(),
@@ -189,21 +239,22 @@ export function StatisticsView() {
     "FLUTE": "flute",
     "MARIMBA": "marimba",
   };
-  const getUserInstrument = (): string => {
-    const savedProfile = localStorage.getItem("profileData");
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile);
-      const character = profile.character || "PIANO";
-      return characterToInstrument[character] || "piano";
-    }
-    return "piano";
-  };
 
   // ========== Data States ==========
   // 주간
   const [weeklyNotes, setWeeklyNotes] = useState<CalendarNoteDto[]>([]);
   const [weeklyChallengeStats, setWeeklyChallengeStats] = useState<ChallengeCompletionResponse | null>(null);
-  
+  const base = currentWeek.baseDate;
+  const { year, month, week } = computeCurrentWeek(base);
+  const [userCharacter, setUserCharacter] = useState("PIANO");
+  const emotionMapKoToEn: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
+    '기쁨': 'JOY',
+    '슬픔': 'SADNESS',
+    '분노': 'ANGER',
+    '무기력': 'APATHY',
+    '예민': 'SENSITIVE',
+  };
+
   // 월간
   const [monthlyDiaryStats, setMonthlyDiaryStats] = useState<DiaryStatsResponse | null>(null);
   const [monthlyEmotionDistribution, setMonthlyEmotionDistribution] = useState<Record<string, number>>({});
@@ -224,33 +275,21 @@ export function StatisticsView() {
 
   // ========== Handlers ==========
   const handleWeekChange = (direction: 'prev' | 'next') => {
-    setCurrentWeek(prev => {
-      let newYear = prev.year;
-      let newMonth = prev.month;
-      let newWeek = direction === 'next' ? prev.week + 1 : prev.week - 1;
-
-      if (newWeek > 5) {
-        newWeek = 1;
-        newMonth++;
-        if (newMonth > 12) {
-          newMonth = 1;
-          newYear++;
-        }
-      } else if (newWeek < 1) {
-        newWeek = 5;
-        newMonth--;
-        if (newMonth < 1) {
-          newMonth = 12;
-          newYear--;
-        }
-      }
-
-      return { year: newYear, month: newMonth, week: newWeek };
-    });
+    setCurrentWeek(prev => ({
+      baseDate: new Date(
+        prev.baseDate.getTime() + (direction === 'next' ? 7 : -7) * 86400000
+      )
+    }));
   };
 
   const handleWeekDateSelect = (year: number, month: number, week: number) => {
-    setCurrentWeek({ year, month, week });
+    const firstDayOfMonth = new Date(year, month - 1, 1);
+    const firstDayWeekday = firstDayOfMonth.getDay();
+    const sunday = getSunday(firstDayOfMonth);
+
+    sunday.setDate(firstDayOfMonth.getDate() - firstDayWeekday + (week - 1) * 7);
+
+    setCurrentWeek({ baseDate: sunday });
   };
 
   const handleMonthChange = (direction: 'prev' | 'next') => {
@@ -276,57 +315,70 @@ export function StatisticsView() {
 
   // ========== Fetch Weekly Data ==========
   useEffect(() => {
+    const now = new Date();
+    setCurrentWeek({
+      baseDate: now,
+      ...computeCurrentWeek(now)
+    });
+  }, []);
+
+  useEffect(() => {
     const fetchWeeklyData = async () => {
       setIsLoadingWeekly(true);
       try {
-        const { year, month, week } = currentWeek;
-        
-        // 주차별 다른 데이터
-        const mockDataByWeek: Record<number, CalendarNoteDto[]> = {
-          1: [
-            { date: `${year}-${String(month).padStart(2, '0')}-03`, note: 'SOL', emotionLabel: 'JOY', score: 85 },
-            { date: `${year}-${String(month).padStart(2, '0')}-04`, note: 'MI', emotionLabel: 'SADNESS', score: 65 },
-            { date: `${year}-${String(month).padStart(2, '0')}-06`, note: 'DO', emotionLabel: 'ANGER', score: 55 },
-          ],
-          2: [
-            { date: `${year}-${String(month).padStart(2, '0')}-09`, note: 'LA', emotionLabel: 'JOY', score: 90 },
-            { date: `${year}-${String(month).padStart(2, '0')}-11`, note: 'FA', emotionLabel: 'APATHY', score: 70 },
-            { date: `${year}-${String(month).padStart(2, '0')}-12`, note: 'RE', emotionLabel: 'SENSITIVE', score: 60 },
-            { date: `${year}-${String(month).padStart(2, '0')}-14`, note: 'SOL', emotionLabel: 'JOY', score: 88 },
-          ],
-          3: [
-            { date: `${year}-${String(month).padStart(2, '0')}-17`, note: 'SOL', emotionLabel: 'JOY', score: 88 },
-            { date: `${year}-${String(month).padStart(2, '0')}-18`, note: 'MI', emotionLabel: 'SADNESS', score: 62 },
-            { date: `${year}-${String(month).padStart(2, '0')}-20`, note: 'LA', emotionLabel: 'JOY', score: 92 },
-            { date: `${year}-${String(month).padStart(2, '0')}-21`, note: 'FA', emotionLabel: 'APATHY', score: 72 },
-            { date: `${year}-${String(month).padStart(2, '0')}-22`, note: 'RE', emotionLabel: 'SENSITIVE', score: 66 },
-          ],
-          4: [
-            { date: `${year}-${String(month).padStart(2, '0')}-24`, note: 'DO', emotionLabel: 'ANGER', score: 58 },
-            { date: `${year}-${String(month).padStart(2, '0')}-26`, note: 'FA', emotionLabel: 'APATHY', score: 68 },
-            { date: `${year}-${String(month).padStart(2, '0')}-27`, note: 'SOL', emotionLabel: 'JOY', score: 85 },
-          ],
-          5: [
-            { date: `${year}-${String(month).padStart(2, '0')}-29`, note: 'LA', emotionLabel: 'JOY', score: 91 },
-            { date: `${year}-${String(month).padStart(2, '0')}-30`, note: 'MI', emotionLabel: 'SADNESS', score: 64 },
-          ],
-        };
-        
-        const notes = mockDataByWeek[week] || [];
-        setWeeklyNotes(notes);
+        // baseDate에서 year, month 추출
+        const base = currentWeek.baseDate;
+        const year = base.getFullYear();
+        const month = base.getMonth() + 1;
 
-        // 주간 챌린지 완료율 (주차별 다름)
-        const challengeByWeek: Record<number, ChallengeCompletionResponse> = {
-          1: { total: 7, completed: 3, rate: 3 / 7 },
-          2: { total: 7, completed: 5, rate: 5 / 7 },
-          3: { total: 7, completed: 6, rate: 6 / 7 },
-          4: { total: 7, completed: 4, rate: 4 / 7 },
-          5: { total: 7, completed: 2, rate: 2 / 7 },
-        };
-        setWeeklyChallengeStats(challengeByWeek[week] || { total: 7, completed: 0, rate: 0 });
+        // 월간 데이터 불러오기
+        const res = await api.get(`/api/calendar-notes/${year}/${month}`);
+        const raw = res.data;
+        const monthNotes: CalendarNoteDto[] =
+          Array.isArray(raw) ? raw : raw?.notes ?? [];
 
+        // 이번 주 날짜 7개 (일~토)
+        const weekDates = getWeekDateListByBase(base);
+
+        const weeklyFiltered = monthNotes.filter(n =>
+          weekDates.includes(normalize(n.date))
+        );
+
+        const normalizedWeeklyNotes = weeklyFiltered.map(n => {
+          const normalizedEmotion =
+            emotionMapKoToEn[n.emotionLabel] || 'APATHY';
+
+          return {
+            ...n,
+            emotion: normalizedEmotion,
+            emotionLabel: normalizedEmotion,
+            contentLength: n.contentLength || 0,
+          };
+        });
+
+        setWeeklyNotes(normalizedWeeklyNotes);
+
+        const fetchUserProfile = async () => {
+          const res = await api.get("/api/users/profile");
+          return res.data; // { character: "MARIMBA", ... }
+        };
+
+        const loadProfile = async () => {
+          try {
+            const profile = await fetchUserProfile();
+            setUserCharacter(profile.character?.toUpperCase() || "PIANO");
+          } catch (e) {
+            console.error("프로필 불러오기 실패:", e);
+          }
+        };
+        loadProfile();
+
+        const challenge = await api.get("/api/statistics/challenges/completion-rate", {
+          params: { period: "weekly" }
+        });
+        setWeeklyChallengeStats(challenge.data);
       } catch (error) {
-        console.error('주간 데이터 로딩 실패:', error);
+        console.error("주간 데이터 로딩 실패:", error);
       } finally {
         setIsLoadingWeekly(false);
       }
@@ -340,129 +392,39 @@ export function StatisticsView() {
     const fetchMonthlyData = async () => {
       setIsLoadingMonthly(true);
       try {
-        const { year, month } = currentMonth;
-        
-        // 월별 다른 데이터
-        const diaryByMonth: Record<number, DiaryStatsResponse> = {
-          10: { totalCount: 84, monthlyCount: 28 },
-          11: { totalCount: 84, monthlyCount: 30 },
-          12: { totalCount: 84, monthlyCount: 25 },
-        };
-        setMonthlyDiaryStats(diaryByMonth[month] || { totalCount: 84, monthlyCount: 20 });
-
-        // 월별 챌린지 수행 현황 (완료 수 / 전체 수)
-        const challengeByMonth: Record<number, Record<string, { completed: number; total: number }>> = {
-          10: { 
-            'JOY': { completed: 12, total: 18 }, 
-            'SADNESS': { completed: 8, total: 14 }, 
-            'ANGER': { completed: 5, total: 8 }, 
-            'SENSITIVE': { completed: 3, total: 6 }, 
-            'APATHY': { completed: 2, total: 4 } 
-          },
-          11: { 
-            'JOY': { completed: 15, total: 20 }, 
-            'SADNESS': { completed: 8, total: 12 }, 
-            'ANGER': { completed: 4, total: 7 }, 
-            'SENSITIVE': { completed: 2, total: 5 }, 
-            'APATHY': { completed: 1, total: 3 } 
-          },
-          12: { 
-            'JOY': { completed: 10, total: 16 }, 
-            'SADNESS': { completed: 6, total: 10 }, 
-            'ANGER': { completed: 6, total: 9 }, 
-            'SENSITIVE': { completed: 2, total: 4 }, 
-            'APATHY': { completed: 1, total: 2 } 
-          },
-        };
-        setMonthlyChallengePerformance(challengeByMonth[month] || { 
-          'JOY': { completed: 10, total: 15 }, 
-          'SADNESS': { completed: 5, total: 10 }, 
-          'ANGER': { completed: 3, total: 6 }, 
-          'SENSITIVE': { completed: 2, total: 4 }, 
-          'APATHY': { completed: 1, total: 2 } 
+        const diary = await api.get("/api/statistics/diary", { 
+          params: { period: "monthly", month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}` } 
         });
+        const challengeEmotion = await api.get("/api/statistics/challenges/emotion-performance", {
+          params: { period: "monthly" }
+        });
+        const music = await api.get("/api/statistics/music", { params: { period: "monthly" }});
+        const keywordRank = await api.get("/api/statistics/keywords/ranking", { params: { period: "monthly" }});
 
-        // 월별 음악 통계
-        const musicByMonth: Record<number, MusicStatsResponse> = {
-          10: {
-            monthlyCount: 25,
-            topGenre: '팝',
-            mapping: {
-              'JOY': { 'Pop': 10, 'Jazz': 3, 'Classical': 2 },
-              'SADNESS': { 'Ballad': 6, 'Classical': 2 },
-              'ANGER': { 'Rock': 4, 'Electronic': 1 },
-              'SENSITIVE': { 'Indie': 3, 'Ballad': 2 },
-              'APATHY': { 'Ambient': 2, 'Lo-fi': 1 }
-            }
-          },
-          11: {
-            monthlyCount: 28,
-            topGenre: '재즈',
-            mapping: {
-              'JOY': { 'Pop': 12, 'Jazz': 5, 'Classical': 3 },
-              'SADNESS': { 'Ballad': 8, 'Classical': 4 },
-              'ANGER': { 'Rock': 6, 'Electronic': 2 },
-              'SENSITIVE': { 'Indie': 5, 'Ballad': 3 },
-              'APATHY': { 'Ambient': 4, 'Lo-fi': 2 }
-            }
-          },
-          12: {
-            monthlyCount: 22,
-            topGenre: '클래식',
-            mapping: {
-              'JOY': { 'Pop': 8, 'Jazz': 4, 'Classical': 5 },
-              'SADNESS': { 'Ballad': 5, 'Classical': 6 },
-              'ANGER': { 'Rock': 5, 'Electronic': 3 },
-              'SENSITIVE': { 'Indie': 3, 'Ballad': 2 },
-              'APATHY': { 'Ambient': 3, 'Lo-fi': 1 }
-            }
-          },
+        setMonthlyDiaryStats(diary.data);
+
+        const ce = challengeEmotion.data;
+        const mergedPerformance: Record<string, { completed: number; total: number }> = {};
+        Object.keys(ce.emotionCounts ?? {}).forEach(emotion => {
+          mergedPerformance[emotion] = {
+            completed: ce.emotionCounts[emotion] ?? 0,
+            total: ce.totalCounts?.[emotion] ?? 0
+          };
+        });
+        setMonthlyChallengePerformance(mergedPerformance);
+
+        const musicRaw = music.data;
+        const normalizedMusicStats = {
+          monthlyCount: musicRaw.monthlyCount ?? 0,
+          topGenre: musicRaw.topGenre ?? "-",
+          emotionGenreMappings: musicRaw.emotionGenreMapping ?? {}
         };
-        setMonthlyMusicStats(musicByMonth[month] || musicByMonth[11]);
+        setMonthlyMusicStats(normalizedMusicStats);
 
-        // 월별 키워드 (최대 31개)
-        const keywordsByMonth: Record<number, Array<{ keyword: string; count: number }>> = {
-          10: [
-            { keyword: '운동', count: 15 },
-            { keyword: '친구', count: 12 },
-            { keyword: '커피', count: 10 },
-            { keyword: '산책', count: 8 },
-            { keyword: '음악', count: 7 },
-            { keyword: '영화', count: 6 },
-            { keyword: '독서', count: 5 },
-            { keyword: '가족', count: 4 },
-            { keyword: '여행', count: 3 },
-            { keyword: '요리', count: 2 }
-          ],
-          11: [
-            { keyword: '커피', count: 18 },
-            { keyword: '친구', count: 15 },
-            { keyword: '산책', count: 12 },
-            { keyword: '독서', count: 10 },
-            { keyword: '음악', count: 9 },
-            { keyword: '영화', count: 7 },
-            { keyword: '운동', count: 6 },
-            { keyword: '가족', count: 5 },
-            { keyword: '여행', count: 4 },
-            { keyword: '요리', count: 3 }
-          ],
-          12: [
-            { keyword: '가족', count: 20 },
-            { keyword: '커피', count: 16 },
-            { keyword: '친구', count: 14 },
-            { keyword: '독서', count: 11 },
-            { keyword: '영화', count: 9 },
-            { keyword: '음악', count: 8 },
-            { keyword: '산책', count: 7 },
-            { keyword: '운동', count: 5 },
-            { keyword: '여행', count: 3 },
-            { keyword: '요리', count: 2 }
-          ],
-        };
-        setMonthlyKeywords(keywordsByMonth[month] || keywordsByMonth[11]);
+        setMonthlyKeywords(keywordRank.data.rankings);  
 
-      } catch (error) {
-        console.error('월간 데이터 로딩 실패:', error);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsLoadingMonthly(false);
       }
@@ -476,41 +438,25 @@ export function StatisticsView() {
     const fetchTotalData = async () => {
       setIsLoadingTotal(true);
       try {
-        setTotalDiaryCount(84);
-        setTotalBadgeCount(12);
+        const diary = await api.get("/api/statistics/diary", { params: { period: "overall" }});
+        const analysis = await api.get("/api/statistics/analysis", { params: { period: "overall" }});
+        const badges = await api.get("/api/statistics/challenges/badges", { params: { period: "overall" }});
+        const mood = await api.get("/api/statistics/keywords/emotion-ranking", { params: { period: "overall" }});
+        const keywordExplore = await api.get("/api/statistics/keywords/explore", { params: { period: "overall" }});
+
+        setTotalDiaryCount(diary.data.totalCount);
+        setTotalEmotionDistribution(analysis.data.emotionDistribution);
+        setTotalBadgeCount(badges.data.badgeCount);
+        setMoodRanking(mood.data);
         
-        setTotalEmotionDistribution({
-          'JOY': 45,
-          'SADNESS': 28,
-          'ANGER': 15,
-          'SENSITIVE': 8,
-          'APATHY': 4
-        });
-
-        // 기쁨일 때 가장 많이 기록된 키워드, 화남일 때 가장 많이 기록된 키워드
-        setMoodRanking({
-          joyKeywords: [
-            { keyword: '친구', icon: '💕', count: 35 },
-            { keyword: '산책', icon: '🚶', count: 28 },
-            { keyword: '음악', icon: '🎵', count: 24 }
-          ],
-          angerKeywords: [
-            { keyword: '직장', icon: '💼', count: 18 },
-            { keyword: '다툼', icon: '💔', count: 12 },
-            { keyword: '스트레스', icon: '😤', count: 10 }
-          ]
-        });
-
-        setTotalKeywordMapping([
-          { keyword: '커피', emotions: { 'JOY': 25, 'APATHY': 12, 'SADNESS': 8 } },
-          { keyword: '친구', emotions: { 'JOY': 35, 'SENSITIVE': 5 } },
-          { keyword: '산책', emotions: { 'JOY': 20, 'SADNESS': 10 } },
-          { keyword: '운동', emotions: { 'JOY': 18, 'ANGER': 5 } },
-          { keyword: '음악', emotions: { 'JOY': 15, 'SADNESS': 8, 'APATHY': 3 } }
-        ]);
-
-      } catch (error) {
-        console.error('누적 데이터 로딩 실패:', error);
+        const exploreRaw = keywordExplore.data.keywordToEmotions ?? {};
+        const mappedList = Object.entries(exploreRaw).map(([keyword, emotions]) => ({
+          keyword,
+          emotions
+        }));
+        setTotalKeywordMapping(mappedList);
+      } catch (err) {
+        console.error(err);
       } finally {
         setIsLoadingTotal(false);
       }
@@ -519,13 +465,16 @@ export function StatisticsView() {
     fetchTotalData();
   }, []);
 
+  useEffect(() => {
+  console.log("🔥 [totalKeywordMapping data] =", totalKeywordMapping);
+}, [totalKeywordMapping]);
+
   // 악기 음 샘플 가져오기
   useEffect(() => {
     const loadSampler = async () => {
       await Tone.start();
 
-      const raw = getUserInstrument();
-      const inst = raw?.toLowerCase() || "piano";
+      const inst = characterToInstrument[userCharacter] || "piano";
       const instPath = INSTRUMENT_MAP[inst];
 
       const sampler = new Tone.Sampler({
@@ -555,57 +504,67 @@ export function StatisticsView() {
     };
 
     loadSampler();
-  }, []);
+  }, [userCharacter]);
 
   // 음 재생
   const playMelody = async () => {
+    console.group("🎧 PLAY MELODY DEBUG START");
+
+    await Tone.start();
+    console.log("🔊 Tone.start() 완료");
+
+    // 샘플러 상태
+    console.log("🎹 samplerLoaded =", samplerLoaded);
+    console.log("🎹 samplerRef =", samplerRef.current);
+
     if (!samplerLoaded || !samplerRef.current) {
-      console.warn("Sampler not loaded yet.");
+      console.warn("⚠️ 샘플러가 아직 준비되지 않았습니다!");
+      console.groupEnd();
       return;
     }
-
-    if (isPlaying) {
-      setIsPlaying(false);
-      return;
-    }
-
-    setIsPlaying(true);
 
     const sampler = samplerRef.current;
-    const noteDuration = 0.5;
-    const gap = 0.1;
-
-    // 주간 날짜 계산
-    const { year, month, week } = currentWeek;
-    const firstDayOfMonth = new Date(year, month - 1, 1);
-    const firstDayOfWeek = firstDayOfMonth.getDay();
-    const startDay = (week - 1) * 7 + 1 - firstDayOfWeek;
-    const sunday = new Date(year, month - 1, startDay);
-
-    const weekDays = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date(sunday);
-      date.setDate(sunday.getDate() + i);
-      return date.toISOString().split("T")[0];
-    });
-
+    const weekDays = getWeekDateListByBase(currentWeek.baseDate);
     const now = Tone.now();
 
-    weekDays.forEach((dateStr, i) => {
-      const noteObj = weeklyNotes.find(n => n.date === dateStr);
-      const midiNote = noteObj ? NOTE_MAP[noteObj.note] : null;
+    // 디버깅 스택
+    const debugList: any[] = [];
 
-      if (midiNote) {
-        sampler.triggerAttackRelease(
-          midiNote,
-          noteDuration,
-          now + i * (noteDuration + gap)
-        );
+    weekDays.forEach((dateStr, i) => {
+      const noteObj = weeklyNotes.find(n => n.date === dateStr || normalize(n.date) === dateStr);
+
+      debugList.push({
+        index: i,
+        dateStr,
+        noteObj,
+        noteValue: noteObj?.note,
+        mapped: noteObj ? NOTE_MAP[noteObj.note] : null,
+        delay: now + i * 0.6
+      });
+
+      if (!noteObj) {
+        console.warn(`⚠️ ${dateStr}: 해당 날짜에 noteObj 없음`);
+        return;
       }
+
+      const midiNote = NOTE_MAP[noteObj.note];
+
+      if (!midiNote) {
+        console.error(`❌ NOTE_MAP에서 매핑 실패: note="${noteObj.note}"`);
+        return;
+      }
+
+      console.log(`🎵 재생 예약 → ${midiNote} @ time = ${now + i * 0.6}`);
+      sampler.triggerAttackRelease(midiNote, 0.5, now + i * 0.6);
     });
 
-    setTimeout(() => setIsPlaying(false), weekDays.length * (noteDuration + gap) * 1000);
-  };
+    console.table(debugList);
 
+    console.groupEnd();
+
+    setIsPlaying(true);
+    setTimeout(() => setIsPlaying(false), weekDays.length * 600);
+  };
 
   if (showMonthlyAnswers) {
     return <MonthlyAnswers onBack={() => setShowMonthlyAnswers(false)} />;
@@ -675,7 +634,7 @@ export function StatisticsView() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="text-[#4A3228]">
-                {currentWeek.year}년 {currentWeek.month}월 {currentWeek.week}주차
+                {year}년 {month}월 {week}주차
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
@@ -855,17 +814,16 @@ export function StatisticsView() {
               {isLoadingWeekly ? (
                 <Skeleton className="h-48 w-full" />
               ) : weeklyNotes.length === 0 ? (
-                <div className="text-center py-8 text-sm text-gray-500">
-                  데이터가 없어요.
-                </div>
+                <div className="text-center py-8 text-sm text-gray-500">데이터가 없어요.</div>
               ) : (
-                <div className="relative bg-white rounded-lg p-6">
+                <div className="relative rounded-lg p-2">
+                  {/* =====  오선  ===== */}
                   <div className="relative" style={{ height: '140px' }}>
                     {[44, 58, 72, 86, 100].map((yPos, index) => (
                       <div
                         key={index}
                         className="absolute"
-                        style={{ 
+                        style={{
                           top: `${yPos}px`,
                           left: 0,
                           width: '100%',
@@ -875,82 +833,71 @@ export function StatisticsView() {
                         }}
                       />
                     ))}
-                    
+
+                    {/* =====  주간 음표 그리기  ===== */}
                     {(() => {
-                      const { year, month, week } = currentWeek;
-                      const firstDayOfMonth = new Date(year, month - 1, 1);
-                      const firstDayOfWeek = firstDayOfMonth.getDay();
-                      
-                      const startDay = (week - 1) * 7 + 1 - firstDayOfWeek;
-                      const sunday = new Date(year, month - 1, startDay);
-                      
-                      const weekDays = Array.from({ length: 7 }, (_, i) => {
-                        const date = new Date(sunday);
-                        date.setDate(sunday.getDate() + i);
-                        return date.toISOString().split('T')[0];
-                      });
-                      
-                      return weekDays.map((dateStr, dayIndex) => {
-                        const noteData = weeklyNotes.find(n => n.date === dateStr);
+                      const dateList = getWeekDateListByBase(currentWeek.baseDate);
+
+                      const sortedNotes = dateList.map(d =>
+                        weeklyNotes.find(n => normalize(n.date) === d) || null
+                      );
+                      return sortedNotes.map((noteData, dayIndex) => {
                         if (!noteData) return null;
-                        
-                        const position = notePositions[noteData.note];
-                        const color = emotionColorMap[noteData.emotionLabel];
-                        const stemDirection = getStemDirection(noteData.note);
-        
+
+                        // 날짜 문자열 기반 contentLength 랜덤 고정
+                        const dateStr = normalize(noteData.date);
+                        let seed = 0;
+                        for (let i = 0; i < dateStr.length; i++) {
+                          seed = (seed * 31 + dateStr.charCodeAt(i)) % 233280;
+                        }
+                        const randomRatio = seed / 233280;
+
+                        const contentLength = Math.floor(randomRatio * 300) + 1;
+
+                        // 위치는 NoteHead 내부에서 계산하므로 x 좌표만 필요
                         const xPercent = (dayIndex + 0.5) * (100 / 7);
-                        
+
                         return (
                           <div
-                            key={dateStr}
+                            key={noteData.date}
                             className="absolute"
                             style={{
                               left: `${xPercent}%`,
-                              top: `${position.yOffset}px`,
-                              transform: 'translate(-50%, -50%)',
+                              top: "0px",
+                              transform: "translate(-50%, -50%)",
                               zIndex: 10
                             }}
                           >
-                            <MusicalNote
-                              color={color}
+                            <NoteHead
+                              note={noteData.note}
+                              emotion={noteData.emotion}
+                              score={noteData.score}
+                              contentLength={contentLength}
                               size={35}
-                              noteLength="quarter"
-                              needsLedgerLine={position.needsLedgerLine}
-                              stemDirection={stemDirection}
                             />
                           </div>
                         );
                       });
                     })()}
                   </div>
-                  
+
+                  {/* ===== 요일 + 감정 텍스트 ===== */}
                   <div className="grid grid-cols-7 gap-0 mt-6">
                     {(() => {
-                      const { year, month, week } = currentWeek;
-                      const firstDayOfMonth = new Date(year, month - 1, 1);
-                      const firstDayOfWeek = firstDayOfMonth.getDay();
-                      
-                      const startDay = (week - 1) * 7 + 1 - firstDayOfWeek;
-                      const sunday = new Date(year, month - 1, startDay);
-                      
-                      return Array.from({ length: 7 }, (_, i) => {
-                        const date = new Date(sunday);
-                        date.setDate(sunday.getDate() + i);
-                        const dateStr = date.toISOString().split('T')[0];
-                        const noteData = weeklyNotes.find(n => n.date === dateStr);
+                      const dateList = getWeekDateListByBase(currentWeek.baseDate);
+
+                      return dateList.map((dateStr, i) => {
+                        const noteData = weeklyNotes.find(n => normalize(n.date) === dateStr);
                         const dayName = dayOfWeekNames[i];
-                        
+
                         return (
-                          <div 
-                            key={i} 
-                            className="flex-1 text-center"
-                          >
+                          <div key={i} className="flex-1 text-center">
                             <span className={`text-xs block ${noteData ? 'font-medium' : 'text-gray-400'}`}>
                               {dayName}
                             </span>
                             {noteData && (
                               <div className="text-[10px] mt-0.5" style={{ color: '#7B8B4F' }}>
-                                {emotionNames[noteData.emotionLabel]}
+                                {emotionNames[noteData.emotion]}
                               </div>
                             )}
                           </div>
@@ -979,17 +926,25 @@ export function StatisticsView() {
                   데이터가 없어요.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-3xl font-semibold" style={{ color: '#7B8B4F' }}>
-                      {Math.round(weeklyChallengeStats.rate * 100)}%
-                    </span>
-                  </div>
-                  <Progress value={weeklyChallengeStats.rate * 100} className="h-3" />
-                  <p className="text-sm text-center" style={{ color: '#4A3228', opacity: 0.7 }}>
-                    총 {weeklyChallengeStats.total}개 중 {weeklyChallengeStats.completed}개 완료
-                  </p>
-                </div>
+                (() => {
+                  const total = weeklyChallengeStats?.totalChallenges ?? 0;
+                  const completed = weeklyChallengeStats?.completedChallenges ?? 0;
+                  const rate = weeklyChallengeStats?.completionRate ?? 0;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-3xl font-semibold" style={{ color: '#7B8B4F' }}>
+                          {Math.round(rate * 100)}%
+                        </span>
+                      </div>
+                      <Progress value={rate * 100} className="h-3" />
+                      <p className="text-sm text-center" style={{ color: '#4A3228', opacity: 0.7 }}>
+                        총 {total}개 중 {completed}개 완료
+                      </p>
+                    </div>
+                  );
+                })()
               )}
             </CardContent>
           </Card>
@@ -1038,45 +993,51 @@ export function StatisticsView() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {Object.entries(monthlyChallengePerformance).map(([emotion, stats]) => {
-                    const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
-                    const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                    const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+                  {monthlyChallengePerformance && Object.entries(monthlyChallengePerformance).length > 0 ? (
+                    Object.entries(monthlyChallengePerformance).map(([emotion, stats]) => {
+                      const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
+                      const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
+                      const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
 
-                    return (
-                      <div key={emotion} className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            {EmotionIcon && (
-                              <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
-                            )}
-                            <span className="text-sm">
-                              {emotionNames[emotion as keyof typeof emotionNames]}
+                      return (
+                        <div key={emotion} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              {EmotionIcon && (
+                                <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
+                              )}
+                              <span className="text-sm">
+                                {emotionNames[emotion as keyof typeof emotionNames]}
+                              </span>
+                            </div>
+                            <span className="text-sm font-medium">
+                              {stats.completed}/{stats.total}개
                             </span>
                           </div>
-                          <span className="text-sm font-medium">
-                            {stats.completed}/{stats.total}개
-                          </span>
-                        </div>
 
-                        <div
-                          className="h-1.5 rounded-full overflow-hidden ml-7"
-                          style={{
-                            backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
-                          }}
-                        >
                           <div
+                            className="h-1.5 rounded-full overflow-hidden ml-7"
                             style={{
-                              width: `${percentage}%`,
-                              height: "100%",
-                              backgroundColor: "#7B8B4F",
-                              transition: "width 0.3s ease",
+                              backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
                             }}
-                          />
+                          >
+                            <div
+                              style={{
+                                width: `${percentage}%`,
+                                height: "100%",
+                                backgroundColor: "#7B8B4F",
+                                transition: "width 0.3s ease",
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-4 text-sm text-gray-500">
+                      데이터가 없어요.
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1094,49 +1055,90 @@ export function StatisticsView() {
               {isLoadingMonthly ? (
                 <Skeleton className="h-32 w-full" />
               ) : !monthlyMusicStats ? (
-                <div className="text-center py-4 text-sm text-gray-500">
-                  데이터가 없어요.
-                </div>
+                <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
               ) : (
                 <div className="space-y-4">
-                  <div>
-                    <p className="text-sm mb-2" style={{ color: '#4A3228', opacity: 0.7 }}>
-                      이번 달 추천받은 곡
-                    </p>
-                    <p className="text-2xl font-semibold" style={{ color: '#7B8B4F' }}>
-                      {monthlyMusicStats.monthlyCount}곡
-                    </p>
-                  </div>
-                  
-                  <div className="bg-gradient-to-r from-[#7B8B4F]/10 to-[#7B8B4F]/5 rounded-lg p-4 text-center">
-                    <p className="text-sm mb-1" style={{ color: '#4A3228', opacity: 0.7 }}>
-                      가장 많이 추천된 장르
-                    </p>
-                    <p className="text-xl font-semibold" style={{ color: '#7B8B4F' }}>
-                      {monthlyMusicStats.topGenre} 🎷
-                    </p>
-                  </div>
 
-                  <div className="space-y-2">
-                    <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>감정별 추천 곡 수</p>
-                    {Object.entries(monthlyMusicStats.mapping).map(([emotion, genres]) => {
-                      const totalCount = Object.values(genres).reduce((a, b) => a + b, 0);
-                      const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                      const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+                  {/* ===============================
+                      1) topGenre 계산
+                  =============================== */}
+                  {(() => {
+                    let topGenre = "-";
+                    let topCount = -1;
 
-                      return (
-                        <div key={emotion} className="flex items-center justify-between py-1">
-                          <div className="flex items-center space-x-2">
-                            {EmotionIcon && <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />}
-                            <span className="text-sm">{emotionNames[emotion as keyof typeof emotionNames]}</span>
+                    const mappings = monthlyMusicStats.emotionGenreMappings ?? {};
+
+                    // 감정별 → 장르별 → 수치 비교
+                    Object.values(mappings).forEach((genres) => {
+                      Object.entries(genres).forEach(([genre, count]) => {
+                        if (count > topCount) {
+                          topCount = count;
+                          topGenre = genre;
+                        }
+                      });
+                    });
+
+                    return (
+                      <div className="bg-gradient-to-r from-[#7B8B4F]/10 to-[#7B8B4F]/5 rounded-lg p-4 text-center">
+                        <p className="text-sm mb-1" style={{ color: '#4A3228', opacity: 0.7 }}>
+                          가장 많이 추천된 장르
+                        </p>
+                        <p className="text-xl font-semibold" style={{ color: '#7B8B4F' }}>
+                          {topGenre} 🎷
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ===============================
+                      2) 감정별 상세 breakdown
+                  =============================== */}
+                  <div className="space-y-4">
+                    <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                      감정별 추천 상세 내역
+                    </p>
+
+                    {monthlyMusicStats.emotionGenreMappings &&
+                    Object.entries(monthlyMusicStats.emotionGenreMappings).length > 0 ? (
+                      Object.entries(monthlyMusicStats.emotionGenreMappings).map(([emotionKo, genres]) => {
+                        const emotion =
+                          emotionKo === '기쁨' ? 'JOY' :
+                          emotionKo === '슬픔' ? 'SADNESS' :
+                          emotionKo === '분노' ? 'ANGER' :
+                          emotionKo === '무기력' ? 'APATHY' :
+                          emotionKo === '예민' ? 'SENSITIVE' : 'APATHY';
+
+                        const totalCount = Object.values(genres).reduce((a, b) => a + b, 0);
+                        const EmotionIcon = emotionIcons[emotion];
+                        const colorClass = emotionColorClasses[emotion];
+
+                        return (
+                          <div key={emotion} className="p-3 border rounded-lg bg-white/60">
+                            <div className="flex items-center gap-2 mb-2">
+                              {EmotionIcon && (
+                                <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
+                              )}
+                              <span className="text-sm font-medium">
+                                {emotionKo} ({totalCount}곡)
+                              </span>
+                            </div>
+
+                            <div className="pl-2 space-y-1">
+                              {Object.entries(genres).map(([genre, count]) => (
+                                <div key={genre} className="flex items-center justify-between text-sm">
+                                  <span>{genre}</span>
+                                  <span style={{ color: '#7B8B4F' }}>{count}곡</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <span className="text-sm font-medium" style={{ color: '#7B8B4F' }}>
-                            {totalCount}곡
-                          </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    ) : (
+                      <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
+                    )}
                   </div>
+
                 </div>
               )}
             </CardContent>
@@ -1253,26 +1255,38 @@ export function StatisticsView() {
             <CardContent>
               {isLoadingTotal ? (
                 <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
                 </div>
-              ) : Object.keys(totalEmotionDistribution).length === 0 ? (
+              ) : !totalEmotionDistribution || Object.keys(totalEmotionDistribution ?? {}).length === 0 ? (
                 <div className="text-center py-4 text-sm text-gray-500">
                   데이터가 없어요.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {Object.entries(totalEmotionDistribution).map(([emotion, count]) => {
-                    const total = Object.values(totalEmotionDistribution).reduce((a, b) => a + b, 0);
-                    const percentage = Math.round((count / total) * 100);
-                    const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                    const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+                  {Object.entries(totalEmotionDistribution ?? {}).map(([emoKo, count]) => {
+                    const emotion =
+                      emoKo === '기쁨' ? 'JOY' :
+                      emoKo === '슬픔' ? 'SADNESS' :
+                      emoKo === '분노' ? 'ANGER' :
+                      emoKo === '무기력' ? 'APATHY' :
+                      emoKo === '예민' ? 'SENSITIVE' :
+                      'APATHY';
+
+                    const total = Object.values(totalEmotionDistribution ?? {}).reduce((a, b) => a + b, 0);
+                    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+                    const EmotionIcon = emotionIcons[emotion];
+                    const colorClass = emotionColorClasses[emotion];
 
                     return (
                       <div key={emotion} className="space-y-1">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
                             {EmotionIcon && <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />}
-                            <span className="text-sm">{emotionNames[emotion as keyof typeof emotionNames]}</span>
+                            <span className="text-sm">
+                              {emotionNames[emotion]}
+                            </span>
                           </div>
                           <span className="text-sm font-medium">{percentage}%</span>
                         </div>
@@ -1320,71 +1334,53 @@ export function StatisticsView() {
             <CardContent>
               {isLoadingTotal ? (
                 <Skeleton className="h-48 w-full" />
-              ) : !moodRanking ? (
-                <div className="text-center py-4 text-sm text-gray-500">
-                  데이터가 없어요.
-                </div>
+              ) : !moodRanking || !moodRanking.emotionToKeywords ? (
+                <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
               ) : (
                 <div className="space-y-6">
-                  {/* 이럴 때 기분이 가장 좋았어요 */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Smile className="w-4 h-4" style={{ color: '#7B8B4F' }} />
-                      <p className="text-sm" style={{ color: '#7B8B4F' }}>
-                        이럴 때 기분이 가장 좋았어요
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {moodRanking.joyKeywords.map((item, index) => (
-                        <div 
-                          key={index}
-                          className="bg-gradient-to-br from-[#7B8B4F]/5 to-[#7B8B4F]/10 rounded-lg p-3 text-center border"
-                          style={{ borderColor: '#E5E5E5' }}
-                        >
-                          <div className="text-xs mb-1" style={{ color: '#7B8B4F' }}>
-                            {index + 1}위
-                          </div>
-                          <div className="text-2xl mb-1">{item.icon}</div>
-                          <div className="text-sm mb-1" style={{ color: '#4A3228' }}>
-                            {item.keyword}
-                          </div>
-                          <div className="text-xs" style={{ color: '#7B8B4F' }}>
-                            {item.count}회
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
 
-                  {/* 이럴 때 기분이 가장 좋지 않았어요 */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Angry className="w-4 h-4" style={{ color: '#FFA0A0' }} />
-                      <p className="text-sm" style={{ color: '#4A3228', opacity: 0.6 }}>
-                        이럴 때 기분이 가장 좋지 않았어요
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {moodRanking.angerKeywords.map((item, index) => (
-                        <div 
-                          key={index}
-                          className="bg-gray-50 rounded-lg p-3 text-center border"
-                          style={{ borderColor: '#E5E5E5' }}
-                        >
-                          <div className="text-xs mb-1" style={{ color: '#4A3228', opacity: 0.6 }}>
-                            {index + 1}위
-                          </div>
-                          <div className="text-2xl mb-1">{item.icon}</div>
-                          <div className="text-sm mb-1" style={{ color: '#4A3228' }}>
-                            {item.keyword}
-                          </div>
-                          <div className="text-xs" style={{ color: '#4A3228', opacity: 0.6 }}>
-                            {item.count}회
-                          </div>
+                  {Object.entries(moodRanking.emotionToKeywords).map(([emotion, keywords]) => {
+                    const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
+                    const emotionName = emotionNames[emotion as keyof typeof emotionNames];
+                    const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+
+                    return (
+                      <div key={emotion}>
+                        <div className="flex items-center gap-2 mb-3">
+                          {EmotionIcon && (
+                            <EmotionIcon className="w-4 h-4" style={{ color: colorClass.bar }} />
+                          )}
+                          <p className="text-sm" style={{ color: '#7B8B4F' }}>
+                            {emotionName}를 느낄 때 자주 등장한 키워드
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          {keywords.length > 0 ? (
+                            keywords.map((keyword, index) => (
+                              <div
+                                key={index}
+                                className="bg-gradient-to-br from-[#7B8B4F]/5 to-[#7B8B4F]/10 rounded-lg p-3 text-center border"
+                                style={{ borderColor: '#E5E5E5' }}
+                              >
+                                <div className="text-xs mb-1" style={{ color: '#7B8B4F' }}>
+                                  {index + 1}위
+                                </div>
+                                <div className="text-sm mb-1" style={{ color: '#4A3228' }}>
+                                  {keyword}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-4 text-sm text-gray-500 col-span-3">
+                              데이터가 없어요.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
                 </div>
               )}
             </CardContent>
@@ -1403,7 +1399,7 @@ export function StatisticsView() {
                 <div className="space-y-4">
                   {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-20 w-full" />)}
                 </div>
-              ) : totalKeywordMapping.length === 0 ? (
+              ) : !totalKeywordMapping || totalKeywordMapping.length === 0 ? (
                 <div className="text-center py-4 text-sm text-muted-foreground">
                   데이터가 없어요.
                 </div>
@@ -1413,32 +1409,30 @@ export function StatisticsView() {
                     키워드별 감정 기록 통계
                   </p>
                   {totalKeywordMapping.map((item, index) => {
-                    const totalCount = Object.values(item.emotions).reduce((a, b) => a + b, 0);
+                    const totalCount = Object.values(item.emotions ?? {}).reduce((a, b) => a + b, 0);
 
                     return (
                       <div key={index} className="bg-card rounded-lg p-3 border border-border">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-foreground">
-                            {item.keyword}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            총 {totalCount}회
-                          </span>
+                          <span className="font-medium text-foreground">{item.keyword}</span>
+                          <span className="text-sm text-muted-foreground">총 {totalCount}회</span>
                         </div>
+
                         <div className="flex items-center gap-2 flex-wrap">
-                          {Object.entries(item.emotions).map(([emotion, count]) => {
-                            const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                            const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+                          {Object.entries(item.emotions ?? {}).map(([emoKo, count]) => {
+                            const emotion = emotionMap[emoKo]; 
+                            if (!emotion) return null; // 잘못된 감정값이면 건너뛰기
+
+                            const EmotionIcon = emotionIcons[emotion];
+                            const colorClass = emotionColorClasses[emotion];
 
                             return (
-                              <div 
-                                key={emotion}
+                              <div
+                                key={`${item.keyword}-${emotion}`}   // ← 키 중복 완전 방지
                                 className={`flex items-center gap-1 px-2 py-1 rounded ${colorClass.bg}`}
                               >
                                 {EmotionIcon && <EmotionIcon className={`w-3 h-3 ${colorClass.text}`} />}
-                                <span className={`text-xs ${colorClass.text}`}>
-                                  {count}
-                                </span>
+                                <span className={`text-xs ${colorClass.text}`}>{count}</span>
                               </div>
                             );
                           })}
