@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../services/api'
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import { motion } from 'motion/react';
@@ -20,14 +20,71 @@ interface LPMonthlyViewProps {
   onDateSelect: (year: number, month: number) => void;
 }
 
+const emotionColors: Record<string, string> = {
+  JOY: "#FFE080",
+  SADNESS: "#90C8FF",
+  ANGER: "#FFA0A0",
+  SENSITIVE: "#C4B0FF",
+  APATHY: "#C8C8C8",
+};
+
 export function LPMonthlyView({
-  musicList,
   currentMonth,
   onSelectMusic,
   onMonthChange,
   onDateSelect,
 }: LPMonthlyViewProps) {
   const { year, month } = currentMonth;
+
+  const [musicList, setMusicList] = useState<LPMusic[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchMonthlyLP() {
+      setLoading(true);
+      try {
+        const res = await api.get(`/api/lp/monthly?year=${year}&month=${month}`);
+        const list = res.data;
+
+        console.log("📦 LP Monthly Raw:", list);
+
+        // 🔥 감정 가져오기
+        const withEmotion = await Promise.all(
+          list.map(async (m: LPMusic) => {
+            const dateStr = m.rewardDate; // YYYY-MM-DD
+
+            try {
+              const diaryRes = await api.get(`/api/diaries?date=${dateStr}`);
+              const emotion = diaryRes.data?.emotionType; // JOY, SADNESS 등
+
+              console.log("🎨 감정 가져오기 성공:", dateStr, emotion);
+
+              return {
+                ...m,
+                diaryEmotion: emotion,
+              };
+            } catch (e) {
+              console.log("⚠️ 감정 없음:", dateStr);
+              return {
+                ...m,
+                diaryEmotion: null,
+              };
+            }
+          })
+        );
+
+        console.log("🎨 감정 병합 완료:", withEmotion);
+        setMusicList(withEmotion);
+      } catch (e) {
+        console.error("❌ 월간 LP 불러오기 실패:", e);
+        setMusicList([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMonthlyLP();
+  }, [year, month]);
 
   // 캘린더 계산
   const firstDayOfMonth = new Date(year, month - 1, 1);
@@ -40,8 +97,7 @@ export function LPMonthlyView({
   musicList.forEach((music) => {
     const date = new Date(music.rewardDate);
     if (date.getFullYear() === year && date.getMonth() === month - 1) {
-      const day = date.getDate();
-      lpByDate[day] = music;
+      lpByDate[date.getDate()] = music;
     }
   });
 
@@ -189,12 +245,9 @@ export function LPMonthlyView({
                             title={music.title} 
                             size="sm"
                             emotionColor={
-                              music.emotionLabel === '기쁨' ? '#FFE080' :
-                              music.emotionLabel === '슬픔' ? '#90C8FF' :
-                              music.emotionLabel === '분노' ? '#FFA0A0' :
-                              music.emotionLabel === '예민' ? '#C4B0FF' :
-                              music.emotionLabel === '무기력' ? '#C8C8C8' :
-                              '#7B8B4F'
+                              music.diaryEmotion
+                                ? emotionColors[music.diaryEmotion]
+                                : '#7B8B4F'
                             }
                           />
                         </div>
@@ -209,12 +262,9 @@ export function LPMonthlyView({
                               title={music.title} 
                               size="sm"
                               emotionColor={
-                                music.emotionLabel === '기쁨' ? '#FFE080' :
-                                music.emotionLabel === '슬픔' ? '#90C8FF' :
-                                music.emotionLabel === '분노' ? '#FFA0A0' :
-                                music.emotionLabel === '예민' ? '#C4B0FF' :
-                                music.emotionLabel === '무기력' ? '#C8C8C8' :
-                                '#7B8B4F'
+                                music.diaryEmotion
+                                  ? emotionColors[music.diaryEmotion]
+                                  : '#7B8B4F'
                               }
                             />
                           </div>
