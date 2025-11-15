@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api'
 import { BadgeCard } from './BadgeCard';
 import { EmptyState } from './EmptyState';
 import { BadgeWithStatus, ChallengeBadgeResponse, EmotionType, ChallengeCategory, EMOTION_LABELS, EMOTION_COLORS } from './types';
@@ -41,82 +42,36 @@ export function BadgeGallery({ onFetchBadges }: BadgeGalleryProps) {
   const loadBadges = async () => {
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Mock 획득한 배지 데이터
-      const mockUnlockedBadges: ChallengeBadgeResponse[] = [
-        {
-          badgeId: 1,
-          badgeDefinitionId: 1,
-          name: '챌린지 입문자',
-          description: '어떤 챌린지든 1회 완료',
-          conditionCount: 1,
-          awardedAt: '2025-10-10T12:00:00',
-        },
-        {
-          badgeId: 2,
-          badgeDefinitionId: 5,
-          name: '기쁨의 달인 I',
-          description: '기쁨 챌린지를 10회 완료',
-          emotionType: 'JOY',
-          conditionCount: 10,
-          awardedAt: '2025-10-15T10:00:00',
-        },
-        {
-          badgeId: 3,
-          badgeDefinitionId: 6,
-          name: '기쁨의 달인 II',
-          description: '기쁨 챌린지를 20회 완료',
-          emotionType: 'JOY',
-          conditionCount: 20,
-          awardedAt: '2025-10-18T14:00:00',
-        },
-        {
-          badgeId: 4,
-          badgeDefinitionId: 9,
-          name: '슬픔 정복자 I',
-          description: '슬픔 챌린지를 10회 완료',
-          emotionType: 'SADNESS',
-          conditionCount: 10,
-          awardedAt: '2025-10-20T14:30:00',
-        },
-        {
-          badgeId: 5,
-          badgeDefinitionId: 13,
-          name: '분노 조절의 달인 I',
-          description: '화남 챌린지를 10회 완료',
-          emotionType: 'ANGER',
-          conditionCount: 10,
-          awardedAt: '2025-10-25T16:45:00',
-        },
-        {
-          badgeId: 6,
-          badgeDefinitionId: 25,
-          name: '운동의 달인 I',
-          description: '운동 챌린지를 10회 완료',
-          category: '운동',
-          conditionCount: 10,
-          awardedAt: '2025-10-28T09:00:00',
-        },
-      ];
-      
-      // 전체 배지 정의와 획득한 배지를 병합
-      const unlockedMap = new Map(mockUnlockedBadges.map(b => [b.badgeDefinitionId, b]));
-      
+      let unlocked: ChallengeBadgeResponse[] = [];
+
+      // 1) 부모에서 onFetchBadges가 내려오면 그것을 우선 사용
+      if (onFetchBadges) {
+        unlocked = await onFetchBadges();
+      } else {
+        // 2) 기본 API 사용
+        const res = await api.get("/api/challenge/badges");
+        console.log(res.data);
+        unlocked = res.data || [];
+      }
+
+      // 3) unlocked를 map 형태로 정리 (badgeId 기준)
+      const unlockedMap = new Map(unlocked.map(b => [b.badgeId, b]));
+
+      // 4) 전체 배지 정의(mockAllBadgeDefinitions) + unlocked 병합
       const badgesWithStatus: BadgeWithStatus[] = mockAllBadgeDefinitions.map(def => {
-        const unlocked = unlockedMap.get(def.id);
+        const info = unlockedMap.get(def.id);
         return {
           ...def,
-          isUnlocked: !!unlocked,
-          awardedAt: unlocked?.awardedAt,
-          badgeId: unlocked?.badgeId,
+          isUnlocked: !!info,
+          awardedAt: info?.awardedAt,
+          badgeId: info?.badgeId,
         };
       });
-      
+
       setAllBadges(badgesWithStatus);
     } catch (error) {
-      console.error('배지 로드 실패:', error);
-      toast.error('잠시 후 다시 시도해 주세요.');
+      console.error("배지 로드 실패:", error);
+      toast.error("배지를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +119,7 @@ export function BadgeGallery({ onFetchBadges }: BadgeGalleryProps) {
       });
       
       // 카테고리별 배지
-      const categories: ChallengeCategory[] = ['운동', '루틴', '도전', '음악', '휴식', '창작', '명상', '사회', '놀이'];
+      const categories: ChallengeCategory[] = ['운동', '루틴', '도전', '음악', '휴식', '창작'];
       categories.forEach(category => {
         const categoryBadges = result.filter(b => b.category === category);
         if (categoryBadges.length > 0) {

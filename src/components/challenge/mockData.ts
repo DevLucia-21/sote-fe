@@ -103,7 +103,7 @@ export const mockChallengeDefinitions: ChallengeDefinitionResponse[] = [
   { id: 67, content: '가방 챙기기', emotionType: 'APATHY', category: '루틴' },
   { id: 68, content: '핸드폰 10분 동안 내려놓고 멍 때리기', emotionType: 'APATHY', category: '루틴' },
   { id: 69, content: '건강체조 따라하기', emotionType: 'APATHY', category: '운동' },
-  { id: 70, content: '아침에 창문 열기', emotionType: 'APATHY', category: '루틴' },
+  { id: 70, content: '아침에 창문 열기', emotionType: '', category: '루틴' },
   { id: 71, content: '간단한 헤어스타일 변화주기', emotionType: 'APATHY', category: '도전' },
   { id: 72, content: '좋아하는 간식 먹기', emotionType: 'APATHY', category: '루틴' },
   { id: 73, content: '간단한 여행 계획 짜기', emotionType: 'APATHY', category: '도전' },
@@ -271,9 +271,6 @@ export const mockSevenDayProgress: SevenDayProgress[] = [
 export const mockAllBadgeDefinitions: BadgeDefinition[] = [
   // 공통 배지 (4개)
   { id: 1, name: '챌린지 입문자', description: '어떤 챌린지든 1회 완료', conditionCount: 1 },
-  { id: 2, name: '챌린지 마스터 I', description: '어떤 챌린지든 10회 완료', conditionCount: 10 },
-  { id: 3, name: '챌린지 마스터 II', description: '어떤 챌린지든 20회 완료', conditionCount: 20 },
-  { id: 4, name: '챌린지 마스터 III', description: '어떤 챌린지든 30회 완료', conditionCount: 30 },
   
   // 기쁨 감정 배지 (4개)
   { id: 5, name: '기쁨의 달인 I', description: '기쁨 챌린지를 10회 완료', emotionType: 'JOY', conditionCount: 10 },

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../services/api'
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
@@ -11,12 +12,13 @@ import { motion } from 'motion/react';
 import { ChallengeDayDetail } from './ChallengeDayDetail';
 
 interface ChallengeData {
+  id: number;
   date: string;
   emotionType: 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE';
   emotionLabel: string;
   category: string;
   content: string;
-  progress: number;
+  completed: boolean;
 }
 
 interface MonthlyChallengeViewProps {
@@ -47,48 +49,39 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
     year: today.getFullYear(),
     month: today.getMonth() + 1,
   });
-  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeData | null>(null);
+  const [selectedChallengeId, setSelectedChallengeId] = useState<number | null>(null);
+  const [challengesByDate, setChallengesByDate] = useState<Record<number, ChallengeData>>({});
+  const [loading, setLoading] = useState(false);
 
-  // 더미 데이터 생성
-  const generateMockChallenges = (year: number, month: number): Record<number, ChallengeData> => {
-    const challenges: Record<number, ChallengeData> = {};
-    const daysInMonth = new Date(year, month, 0).getDate();
-    
-    const emotionTypes: Array<'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = 
-      ['JOY', 'SADNESS', 'ANGER', 'APATHY', 'SENSITIVE'];
-    const categories = ['운동', '음악', '취미', '관계', '휴식'];
-    const contents = [
-      '500보 이상 산책하기',
-      '좋아하는 노래 듣기',
-      '창밖 풍경 사진 찍기',
-      '친구에게 안부 묻기',
-      '10분 스트레칭하기',
-      '일기 작성하기',
-      '명상 5분 하기',
-      '책 한 챕터 읽기',
-      '따뜻한 차 한 잔 마시기',
-      '감사한 일 3가지 적기',
-    ];
+  const fetchMonthlyChallenges = async (year: number, month: number) => {
+    try {
+      setLoading(true);
 
-    // 랜덤하게 챌린지 생성 (약 70% 확률로)
-    for (let day = 1; day <= daysInMonth; day++) {
-      if (Math.random() > 0.3) {
-        const emotionType = emotionTypes[Math.floor(Math.random() * emotionTypes.length)];
-        challenges[day] = {
-          date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-          emotionType,
-          emotionLabel: emotionLabels[emotionType],
-          category: categories[Math.floor(Math.random() * categories.length)],
-          content: contents[Math.floor(Math.random() * contents.length)],
-          progress: Math.random() > 0.5 ? 100 : Math.floor(Math.random() * 10) * 10,
-        };
-      }
+      const res = await api.get("/api/challenge/history/monthly", {
+        params: { year, month },
+      });
+      console.log("월간 응답:", res.data);
+
+      // API는 배열로 오니까 날짜별로 재구성
+      const map: Record<number, ChallengeData> = {};
+
+      res.data.forEach((item: ChallengeData) => {
+        const day = Number(item.date.split("-")[2]); // YYYY-MM-DD → DD
+        map[day] = item;
+      });
+
+      setChallengesByDate(map);
+
+    } catch (err) {
+      console.error("❌ 월간 챌린지 불러오기 실패:", err);
+    } finally {
+      setLoading(false);
     }
-
-    return challenges;
   };
 
-  const challengesByDate = generateMockChallenges(currentMonth.year, currentMonth.month);
+  useEffect(() => {
+    fetchMonthlyChallenges(currentMonth.year, currentMonth.month);
+  }, [currentMonth]);
 
   const handleMonthChange = (direction: 'prev' | 'next') => {
     setCurrentMonth((prev) => {
@@ -111,11 +104,11 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
     setCurrentMonth({ year, month });
   };
 
-  if (selectedChallenge) {
+  if (selectedChallengeId) {
     return (
       <ChallengeDayDetail
-        challenge={selectedChallenge}
-        onBack={() => setSelectedChallenge(null)}
+        challengeId={selectedChallengeId}
+        onBack={() => setSelectedChallengeId(null)}
       />
     );
   }
@@ -260,7 +253,10 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
                   style={{
                     backgroundColor: challenge ? '#FFFFFF' : undefined,
                   }}
-                  onClick={challenge ? () => setSelectedChallenge(challenge) : undefined}
+                  onClick={() => {
+                    console.log("선택한 ID:", challenge.id);
+                    setSelectedChallengeId(challenge.id);
+                  }}
                 >
                   {/* 날짜 */}
                   <span className="text-[0.55rem] md:text-xs mb-0.5 md:mb-1 text-muted-foreground">
@@ -272,7 +268,7 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
                     <div className="flex-1 flex flex-col items-center justify-center space-y-0.5 md:space-y-1">
                       {/* 모바일: 완료/미완료 작은 칩 */}
                       <div className="md:hidden w-full h-full flex items-center justify-center">
-                        {challenge.progress === 100 ? (
+                        {challenge.completed ? (
                           <div className="text-[0.5rem] px-1.5 py-0.5 rounded-full bg-primary text-white">
                             ✓
                           </div>
@@ -305,7 +301,7 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
                         </p>
 
                         {/* 완료 표시 */}
-                        {challenge.progress === 100 && (
+                        {challenge.completed && (
                           <div 
                             className="text-xs lg:text-sm px-2 py-0.5 lg:px-2.5 lg:py-1 rounded bg-primary text-white"
                             style={{ fontWeight: 600 }}
