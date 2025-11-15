@@ -59,6 +59,7 @@ export function AnalysisLoading({
   const [progress, setProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
   const [userCharacterImage, setUserCharacterImage] = useState<string | null>(null);
+  const [Lp, setLp] = useState(null);
 
   const [isError, setIsError] = useState(false);  // ★ 빠져있던 코드 복구
 
@@ -101,6 +102,15 @@ export function AnalysisLoading({
       clearInterval(messageInterval);
     };
   }, []);
+  
+  async function fetchLP() {
+    try {
+      const lpRes = await api.get("/lp/today");
+      setLp(lpRes.data);
+    } catch (err) {
+      console.warn("⚠️ 오늘의 LP 불러오기 실패:", err);
+    }
+  }
 
   async function fetchChallenge() {
     try {

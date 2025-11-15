@@ -66,7 +66,7 @@ export function EmotionCard({
       <Card className="overflow-hidden border-none shadow-lg">
         {/* Header with character */}
         <div
-          className="relative p-8 pb-20"
+          className="relative p-8 pb-16"
           style={{ backgroundColor: style.backgroundColor }}
         >
           {/* Decorative background pattern */}

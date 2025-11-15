@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../services/api'
 import { motion } from 'motion/react';
 import { ArrowLeft, FileText, Mic, Pencil } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -19,139 +20,106 @@ interface DiaryDetailViewProps {
   characterType?: CharacterType;
 }
 
-// Mock data for music and challenge recommendations
-function getMockAnalysisData(diary: DiaryEntry): AnalysisResultType {
-  const emotionLabel = getEmotionLabel(diary.emotion);
-  
-  // 일기 내용 기반 감정 분석 이유 (날짜별)
-  const emotionReasonsByDate: Record<string, string> = {
-    '2025-10-02': '기쁨의 감정을 직접 표현하셨네요.',
-    '2025-10-03': '좋은 소식과 친구와의 즐거운 시간에서 기쁨이 느껴져요.',
-    '2025-10-05': '여러 일들이 겹쳐 힘들었던 감정이 느껴져요.',
-    '2025-10-06': '미팅 실수와 추가 업무로 속상했던 마음이 전해져요.',
-    '2025-10-09': '무기력한 상태를 짧게 표현하셨네요.',
-    '2025-10-10': '아무것도 하고 싶지 않았던 에너지 없는 하루였어요.',
-    '2025-10-13': '작은 일에도 신경 쓰이고 친구 말에 상처받은 예민한 하루였어요.',
-    '2025-10-14': '소음, 시선 등 평소 괜찮던 것들이 불편하게 느껴진 예민한 감정이 드러나요.',
-    '2025-10-17': '화난 감정을 짧고 강하게 표현하셨어요.',
-    '2025-10-18': '억울한 일로 인한 분노가 하루 종일 이어졌네요.',
-    '2025-10-21': '친구와의 대화, 산책 등 긍정적인 경험들이 가득했어요.',
-    '2025-10-25': '특별한 이유 없이 찾아온 슬픔을 솔직하게 담으셨네요.',
-    '2025-11-10': '새로운 시작에 대한 설렘과 행복한 하루의 순간들이 가득했어요.',
-  };
-  
-  // Mock music recommendations based on emotion
-  const musicRecommendations: Record<string, any> = {
-    기쁨: {
-      title: 'Happy',
-      artist: 'Pharrell Williams',
-      album: 'G I R L',
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-      spotifyUrl: '#',
-      reason: '밝고 경쾌한 멜로디가 기쁜 감정을 더욱 고조시켜줄 거예요.',
-    },
-    슬픔: {
-      title: 'Someone Like You',
-      artist: 'Adele',
-      album: '21',
-      coverUrl: 'https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop',
-      spotifyUrl: '#',
-      reason: '따뜻한 위로가 되어줄 감성적인 멜로디예요.',
-    },
-    분노: {
-      title: 'Lose Yourself',
-      artist: 'Eminem',
-      album: '8 Mile',
-      coverUrl: 'https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=400&fit=crop',
-      spotifyUrl: '#',
-      reason: '강렬한 비트로 분노를 에너지로 전환시켜줘요.',
-    },
-    무기력: {
-      title: 'Weightless',
-      artist: 'Marconi Union',
-      album: 'Weightless',
-      coverUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
-      spotifyUrl: '#',
-      reason: '평온한 사운드가 마음의 안정을 찾아줄 거예요.',
-    },
-    예민: {
-      title: 'Clair de Lune',
-      artist: 'Claude Debussy',
-      album: 'Suite Bergamasque',
-      coverUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop',
-      spotifyUrl: '#',
-      reason: '부드러운 피아노 선율이 예민한 감정을 진정시켜줘요.',
-    },
-  };
-
-  // Mock challenge recommendations based on emotion
-  const challengeRecommendations: Record<string, any> = {
-    기쁨: {
-      title: '행복 일기 3줄 쓰기',
-      description: '오늘의 기쁜 순간을 3줄로 정리해보세요',
-      icon: '✨',
-      difficulty: 'easy',
-      duration: '5분',
-    },
-    슬픔: {
-      title: '감정 표현하기',
-      description: '마음속 감정을 글이나 그림으로 표현해보세요',
-      icon: '🎨',
-      difficulty: 'medium',
-      duration: '10분',
-    },
-    분노: {
-      title: '심호흡 명상',
-      description: '5분간 깊은 호흡으로 마음을 진정시켜보세요',
-      icon: '🧘',
-      difficulty: 'easy',
-      duration: '5분',
-    },
-    무기력: {
-      title: '가벼운 산책',
-      description: '10분만 밖에 나가서 걸어보세요',
-      icon: '🚶',
-      difficulty: 'easy',
-      duration: '10분',
-    },
-    예민: {
-      title: '감사 일기',
-      description: '오늘 감사한 일 3가지를 적어보세요',
-      icon: '🙏',
-      difficulty: 'easy',
-      duration: '5분',
-    },
-  };
-
-  // 날짜별 맞춤 이유 또는 기본 감정별 이유
-  const defaultReasons: Record<string, string> = {
-    기쁨: '긍정적인 표현이 많고 에너지 넘치는 단어를 사용했어요.',
-    슬픔: '회상과 그리움의 단어들이 많이 보였어요.',
-    분노: '강렬하고 단호한 표현들이 분노의 감정을 보여주고 있어요.',
-    무기력: '피곤함과 지침을 나타내는 표현들이 많았어요.',
-    예민: '세심하고 민감한 표현들이 눈에 띄었어요.',
-  };
-
-  return {
-    date: diary.date,
-    emotion: emotionLabel as any,
-    confidence: Math.round(diary.score * 20),
-    reason: emotionReasonsByDate[diary.date] || defaultReasons[emotionLabel] || `${emotionLabel}의 감정이 느껴지는 글이었어요.`,
-    description: `오늘 하루 ${emotionLabel}이 느껴지는 날이었네요.`,
-    music: musicRecommendations[emotionLabel] || musicRecommendations['기쁨'],
-    challenge: challengeRecommendations[emotionLabel] || challengeRecommendations['기쁨'],
-  };
-}
-
 export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterType }: DiaryDetailViewProps) {
-  const emotionLabel = getEmotionLabel(diary.emotion);
-  const color = emotionColors[diary.emotion];
-  const analysisData = getMockAnalysisData(diary);
+  const [diaryData, setDiaryData] = useState<DiaryEntry | null>(null);
+  const [analysisData, setAnalysisData] = useState<AnalysisResultType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const characterToInstrument: Record<string, string> = {
+    "PIANO": "piano",
+    "VIOLIN": "violin",
+    "GUITAR": "guitar",
+    "FLUTE": "flute",
+    "MARIMBA": "marimba",
+  };
+  const [userCharacter, setUserCharacter] = useState("PIANO");
+
+  async function fetchChallenge() {
+    try {
+      // 오늘 이미 추천되었으면 여기서 받아짐
+      const res = await api.get("/api/challenge/status");
+      return res.data.challenge || res.data;
+    } catch (err) {
+      console.error("❌ 챌린지 로드 실패:", err);
+      return null;
+    }
+  }
   
-  // 작성 일자와 일기 날짜가 같은 날인지 확인 (챌린지 표시 여부)
-  const wasWrittenOnSameDay = diary.createdAt 
-    ? diary.createdAt.split('T')[0] === diary.date 
-    : true; // createdAt이 없으면 챌린지 표시 (기존 데이터)
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+
+        const fetchUserProfile = async () => {
+          const res = await api.get("/api/users/profile");
+          return res.data; // { character: "MARIMBA", ... }
+        };
+
+        const loadProfile = async () => {
+          try {
+            const profile = await fetchUserProfile();
+            setUserCharacter(profile.character?.toUpperCase() || "PIANO");
+          } catch (e) {
+            console.error("프로필 불러오기 실패:", e);
+          }
+        };
+        loadProfile();
+
+        // 1) 일기 상세
+        const diaryRes = await api.get(`/api/diaries?date=${diary.date}`);
+        setDiaryData(diaryRes.data);
+
+        // 2) 분석 데이터 가져오기
+        const analysisRes = await api.get(`/api/analysis/${diaryRes.data.id}`);
+        const raw = analysisRes.data;
+
+        const challenge = await fetchChallenge();
+
+        // 3) MusicCard 형식으로 변환
+        const musicData = {
+          title: raw.selectedTrackTitle,
+          artist: raw.selectedTrackArtist,
+          genre: raw.selectedTrackGenre,
+          reason: raw.emotionReason,
+          album: raw.selectedTrackAlbum,
+          coverUrl: null
+        };
+
+        const mappedChallenge = challenge
+          ? {
+              title: challenge.category,
+              content: challenge.content,
+              emotion: challenge.emotionType,
+              difficulty: challenge.category || "easy", // 백엔드에 난이도 없음 → category 사용 또는 기본값
+              duration: "5분",  // 백엔드에 duration 없음 → 기본값
+              icon: "✨",        // 백엔드에 아이콘 없음 → 기본값
+            }
+          : null;
+
+        const mappedAnalysisData: AnalysisResultType = {
+          emotion: raw.emotionLabel,
+          confidence: Math.round(raw.emotionScore * 100),
+          reason: raw.emotionReason,
+          description: `${raw.emotionLabel}의 감정이 느껴지는 하루였어요.`,
+          music: musicData,
+          challenge: mappedChallenge,
+        };
+
+        setAnalysisData(mappedAnalysisData);
+
+      } catch (err) {
+        console.error("❌ DiaryDetailView fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [diary.date]);
+
+  if (loading || !diaryData || !analysisData) {
+    return <div className="flex justify-center items-center min-h-screen py-20">로딩 중...</div>;
+  }
+  const color = emotionColors[analysisData.emotion];
   
   const getWriteTypeIcon = () => {
     switch (diary.writeType) {
@@ -170,9 +138,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
     switch (diary.writeType) {
       case 'TEXT':
         return '텍스트';
-      case 'VOICE':
+      case 'STT':
         return '음성';
-      case 'HANDWRITING':
+      case 'OCR':
         return '손글씨';
       default:
         return '텍스트';
@@ -183,6 +151,18 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
     if (onEdit) {
       onEdit(diary);
     }
+  };
+
+  const isToday = (dateStr: string) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const today = new Date();
+
+    return (
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
+    );
   };
   
   return (
@@ -292,11 +272,11 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             reason={analysisData.reason}
             description={analysisData.description}
             instrument="piano"
-            characterType={characterType}
+            characterType={userCharacter}
           />
 
           {/* Card 3: Music Recommendation - 이지모드에서 제거 */}
-          {!isEasyMode && (
+          {!isEasyMode && analysisData.music && (
             <MusicCard
               music={analysisData.music}
               emotion={analysisData.emotion}
@@ -305,7 +285,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           )}
 
           {/* Card 4: Challenge - 당일 작성한 일기만 표시, 이지모드에서 제거 */}
-          {!isEasyMode && wasWrittenOnSameDay && (
+          {!isEasyMode &&
+            analysisData.challenge &&
+            isToday(diary.date) && (
             <ChallengeCard
               challenge={analysisData.challenge}
               emotion={analysisData.emotion}
@@ -313,9 +295,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             />
           )}
         </div>
-
-        {/* Bottom Spacing */}
-        <div className="h-12" />
       </div>
     </div>
   );

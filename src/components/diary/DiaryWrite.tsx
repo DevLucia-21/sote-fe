@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import api from '../../services/api'
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -9,18 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { KeywordChip } from './KeywordChip';
 import { WriteType, EmotionType, Diary } from './types';
-import { mockKeywords } from './mockData';
 import { addDiaryEntry, mockDiaryData } from '../calendar/mockData';
-import { getNote } from '../calendar/noteMapping';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
 import { AnalysisResult } from '../analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
-import {
-  musicRecommendations,
-  challengeRecommendations,
-  emotionReasons,
-  emotionDescriptions,
-} from '../analysis/mockData';
 import {
   ArrowLeft,
   Type,
@@ -30,7 +22,6 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  Plus,
   X,
   Square,
   Trash2
@@ -50,6 +41,22 @@ interface DiaryWriteProps {
   isEasyMode?: boolean;
 }
 
+const reverseEmotionMap: Record<string, EmotionType> = {
+  JOY: "기쁨",
+  SADNESS: "슬픔",
+  ANGER: "분노",
+  APATHY: "무기력",
+  SENSITIVE: "예민",
+};
+
+const emotionMap: Record<EmotionType, string> = {
+  기쁨: "JOY",
+  슬픔: "SADNESS",
+  분노: "ANGER",
+  무기력: "APATHY",
+  예민: "SENSITIVE",
+};
+
 export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWriteType, date: initialDate, editMode, isEasyMode }: DiaryWriteProps) {
   const [writeType, setWriteType] = useState<WriteType>(initialWriteType || editingDiary?.writeType || 'TEXT');
   const [date, setDate] = useState<Date>(
@@ -60,14 +67,24 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       : new Date()
   );
   const [content, setContent] = useState(editingDiary?.content || '');
-  const [emotionType, setEmotionType] = useState<EmotionType | undefined>(editingDiary?.emotionType);
-  const [selectedKeywords, setSelectedKeywords] = useState<string[]>(editingDiary?.keywords || []);
+  const [userKeywords, setUserKeywords] = useState<{id: number; content: string;}[]>([]);
+  const [emotionType, setEmotionType] = useState<EmotionType | null>(
+    editingDiary ? reverseEmotionMap[editingDiary.emotionType] : null
+  );
+  const [selectedKeywords, setSelectedKeywords] = useState<string[]>(() => {
+    if (!editingDiary?.keywords) return [];
+
+    if (typeof editingDiary.keywords[0] === "string") {
+      return editingDiary.keywords as string[];
+    }
+
+    return editingDiary.keywords.map((k: any) => k.content);
+  });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | undefined>(editingDiary?.imageUrl);
   const [sttStatus, setSttStatus] = useState<'idle' | 'recording' | 'processing' | 'success' | 'error'>('idle');
   const [ocrStatus, setOcrStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [showMinLengthDialog, setShowMinLengthDialog] = useState(false);
-  const [keywordInput, setKeywordInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
@@ -80,27 +97,12 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   // 손글씨 캔버스 관련 상태
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [ocrAllowed, setOcrAllowed] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const MINIMUM_LENGTH = 10;
-
-  // 과거 일기인지 확인 (오늘이 아닌 날짜)
-  const isPastDiary = initialDate && initialDate !== format(new Date(), 'yyyy-MM-dd');
-
-  // localStorage에서 사용자 키워드 목록 가져오기
-  const getUserKeywords = () => {
-    const saved = localStorage.getItem('userKeywords');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return mockKeywords;
-      }
-    }
-    return mockKeywords;
-  };
 
   // Generate date options (오늘부터 30일 전까지)
   const dateOptions = Array.from({ length: 30 }, (_, i) => {
@@ -143,42 +145,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     }
   };
 
-  const addCustomKeyword = () => {
-    const keyword = keywordInput.trim();
-    
-    if (!keyword) {
-      toast.error('키워드를 입력해주세요.');
-      return;
-    }
-
-    if (keyword.length > 10) {
-      toast.error('키워드는 10자 이하로 입력해주세요.');
-      return;
-    }
-
-    if (selectedKeywords.includes(keyword)) {
-      toast.error('이미 선택된 키워드입니다.');
-      setKeywordInput('');
-      return;
-    }
-
-    if (selectedKeywords.length >= 5) {
-      toast.error('키워드는 최대 5개까지만 선택할 수 있습니다.');
-      return;
-    }
-
-    setSelectedKeywords([...selectedKeywords, keyword]);
-    setKeywordInput('');
-    toast.success(`"${keyword}" 키워드를 추가했습니다.`);
-  };
-
-  const handleKeywordInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addCustomKeyword();
-    }
-  };
-
   const handleDateSelect = (dateStr: string) => {
     const newDate = new Date(dateStr);
 
@@ -214,24 +180,13 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('이미지 크기는 10MB 이하여야 합니다.');
-      return;
-    }
-
     setImageFile(file);
-    setOcrStatus('processing');
+    setOcrStatus("processing");
 
-    // Simulate OCR processing
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       setImagePreview(reader.result as string);
-      
-      setTimeout(() => {
-        setOcrStatus('success');
-        setContent('손글씨로 작성된 일기 내용입니다. OCR 기술을 통해 자동으로 인식되었습니다. 오늘 하루는 특별했어요...');
-        toast.success('손글씨 인식이 완료되었습니다.');
-      }, 2000);
+      await sendToOCR(file);   // 🔥 여기서 바로 OCR 호출
     };
     reader.readAsDataURL(file);
   };
@@ -240,19 +195,12 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('audio/')) {
-      toast.error('오디오 파일만 업로드 가능합니다.');
+    if (!file.type.startsWith("audio/")) {
+      toast.error("오디오 파일만 업로드 가능합니다.");
       return;
     }
 
-    setSttStatus('processing');
-
-    // Simulate STT processing
-    setTimeout(() => {
-      setSttStatus('success');
-      setContent('음성으로 전사된 일기 내용입니다. 오늘 하루 정말 좋았어요. 친구들과 만나서 이야기를 나누고, 맛있는 음식도 먹었습니다.');
-      toast.success('음성 전사가 완료되었습니다.');
-    }, 3000);
+    sendToSTT(file);  // ← ★ 업로드한 파일도 STT API로 바로 전송
   };
 
   // 음성 녹음 시작
@@ -268,20 +216,10 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         }
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
-        // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
-        
-        // 녹음 완료 후 STT 처리
-        setSttStatus('processing');
-        
-        // Simulate STT processing
-        setTimeout(() => {
-          setSttStatus('success');
-          setContent('음성으로 녹음된 일기 내용입니다. 오늘 하루 정말 좋았어요. 친구들과 만나서 이야기를 나누고, 맛있는 음식도 먹었습니다. 날씨도 좋았고 기분이 정말 좋았습니다.');
-          toast.success('음성 전사가 완료되었습니다.');
-        }, 2000);
+        await sendToSTT(blob); // ← ★ 바로 STT API 호출
       };
 
       setMediaRecorder(recorder);
@@ -305,13 +243,11 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
   // 음성 녹음 중지
   const stopRecording = () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
+    if (mediaRecorder?.state === "recording") {
       mediaRecorder.stop();
-      if (recordingTimer) {
-        clearInterval(recordingTimer);
-        setRecordingTimer(null);
-      }
-      toast.success('녹음을 완료했습니다. 전사 중입니다...');
+      clearInterval(recordingTimer!);
+      setRecordingTimer(null);
+      toast.success("녹음을 완료했습니다. 변환 중...");
     }
   };
 
@@ -329,6 +265,50 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     setSttStatus('idle');
     setRecordingTime(0);
     toast('녹음을 취소했습니다.');
+  };
+
+  // 실제 STT API 호출
+  const sendToSTT = async (audioBlob: Blob) => {
+    try {
+      setSttStatus("processing");
+
+      const file = new File([audioBlob], `recording-${Date.now()}.webm`, {
+        type: "audio/webm",
+      });
+
+      const userId = Number(localStorage.getItem("user_id"));
+      const diaryDate = new Date().toISOString().split("T")[0];
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("user_id", userId.toString());
+      formData.append("diary_date", diaryDate);
+      formData.append("do_vad", "true");
+
+      const res = await api.post("/ai/stt/transcribe", formData, {
+        baseURL: "http://localhost:8000",
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      console.log("🟢 STT 응답:", res.data);
+
+      const { text } = res.data;
+      if (!text) {
+        toast.error("변환된 텍스트가 비어 있습니다.");
+        setSttStatus("error");
+        return;
+      }
+
+      setContent(text);
+      setSttStatus("success");
+
+      toast.success("음성이 텍스트로 변환되었습니다!");
+
+    } catch (err: any) {
+      console.error("❌ STT 오류:", err);
+      toast.error("음성 변환 중 오류가 발생했습니다.");
+      setSttStatus("error");
+    }
   };
 
   // 손글씨 캔버스 초기화
@@ -416,34 +396,71 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    setOcrStatus('processing');
+    setOcrStatus("processing");
 
-    // Canvas를 이미지로 변환
-    canvas.toBlob((blob) => {
+    canvas.toBlob(async (blob) => {
       if (!blob) {
-        toast.error('이미지 변환에 실패했습니다.');
-        setOcrStatus('error');
+        toast.error("이미지 변환 실패");
+        setOcrStatus("error");
         return;
       }
 
+      // 프리뷰 업데이트
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-        
-        // Simulate OCR processing
-        setTimeout(() => {
-          setOcrStatus('success');
-          setContent('손글씨로 작성된 일기 내용입니다. 캔버스에 직접 그린 내용을 OCR 기술을 통해 자동으로 인식했습니다. 오늘 하루는 정말 특별했어요. 친구들과 좋은 시간을 보냈습니다.');
-          toast.success('손글씨 인식이 완료되었습니다.');
-        }, 2000);
-      };
+      reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(blob);
-    }, 'image/png');
+
+      await sendToOCR(blob);  // 🔥 canvas → OCR
+    }, "image/png");
+  };
+
+  // 🔥 공통 OCR API 호출
+  const sendToOCR = async (imageBlob: Blob) => {
+    try {
+      setOcrStatus("processing");
+
+      const file = new File([imageBlob], `handwriting-${Date.now()}.png`, {
+        type: "image/png",
+      });
+
+      const userId = Number(localStorage.getItem("user_id"));
+      const diaryDate = new Date().toISOString().split("T")[0];
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("user_id", String(userId));
+      formData.append("diary_date", diaryDate);
+
+      const res = await api.post("/api/ocr/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      console.log("🟢 OCR 응답:", res.data);
+
+      const { text } = res.data;
+      if (!text) {
+        toast.error("인식된 텍스트가 없습니다.");
+        setOcrStatus("error");
+        return;
+      }
+
+      setContent(text);
+      setOcrAllowed(true);  // OCR 사용 가능
+      setOcrStatus("success");
+      toast.success("손글씨가 텍스트로 변환되었습니다!");
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setOcrAllowed(false);   // 하루 횟수 초과
+      }
+      console.error("❌ OCR 오류:", err);
+      toast.error("손글씨 인식 중 오류가 발생했습니다.");
+      setOcrStatus("error");
+    }
   };
 
   const handleSave = async () => {
     if (!content.trim()) {
-      toast.error('일기 내용을 입력해주세요.');
+      toast.error("일기 내용을 입력해주세요.");
       return;
     }
 
@@ -452,115 +469,91 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       return;
     }
 
-    const diaryData: Partial<Diary> = {
-      date: date.toISOString().split('T')[0],
-      content: content.trim(),
-      writeType,
-      emotionType,
-      keywords: selectedKeywords,
-      imageUrl: imagePreview,
-      analysisStatus: 'PENDING'
+    const formatDateLocal = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     };
 
-    // 수정 모드인 경우 - 내용만 업데이트하고 재분석하지 않음
-    if (editMode && editingDiary) {
+    // 백엔드가 요구하는 payload
+    const payload = {
+      date: editingDiary ? editingDiary.date : formatDateLocal(date),
+      content: content.trim(),
+      keywordIds: editingDiary
+        ? editingDiary.keywordIds            // ← 수정 모드는 항상 기존 값 유지!
+        : userKeywords
+            .filter(kw => selectedKeywords.includes(kw.content))
+            .map(kw => kw.id),
+      emotionType: editingDiary
+        ? editingDiary.emotionType          // ← 감정도 수정 불가 정책이면 고정
+        : emotionType
+            ? emotionMap[emotionType]
+            : null,
+    };
+
+    console.group("📌 Diary Save Payload Debug");
+    console.log("writeType:", writeType);
+    console.log("date:", formatDateLocal(date));
+    console.log("content:", content.trim());
+    console.log("selectedKeywords:", selectedKeywords);
+    console.log("userKeywords(raw):", userKeywords);
+    console.log("keywordIds:", userKeywords
+      .filter(kw => selectedKeywords.includes(kw.content))
+      .map(kw => kw.id)
+    );
+    console.log("emotionType:", emotionType);
+    console.log("payload:", payload);
+    console.groupEnd();
+    console.log("🔍 selectedKeywords:", selectedKeywords);
+    console.log("🔍 editingDiary.keywords:", editingDiary?.keywords);
+
+    try {
       setIsSaving(true);
-      toast.success('일기를 수정하고 있습니다...');
-      
-      setTimeout(() => {
-        setIsSaving(false);
-        
-        // mockData에서 해당 일기 찾아서 내용만 업데이트
-        const index = mockDiaryData.findIndex(d => d.date === editingDiary.date);
-        if (index !== -1) {
-          mockDiaryData[index] = {
-            ...mockDiaryData[index],
-            content: diaryData.content!,
-            keywords: diaryData.keywords!,
-          };
-        }
-        
-        toast.success('일기가 수정되었습니다.');
-        
-        // 콜백 호출하여 캘린더 갱신
-        onSave?.(diaryData);
-      }, 500);
-      return;
-    }
 
-    // 과거 일기 작성 시 저장 및 분석
-    if (isPastDiary) {
-      setIsSaving(true);
-      toast.success('일기를 저장하고 있습니다...');
-      
-      // Mock 감정 분석 시뮬레이션
-      setTimeout(() => {
-        setIsSaving(false);
-        setIsAnalyzing(true);
-      }, 500);
+      // ✨ 수정 모드 (PUT /api/diaries)
+      if (editMode && editingDiary) {
+        const res = await api.put("/api/diaries", payload);
 
-      setTimeout(() => {
-        setIsAnalyzing(false);
-        
-        // 랜덤 감정 선택 (실제로는 AI 분석 결과)
-        const emotions: Array<'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = ['JOY', 'SADNESS', 'ANGER', 'APATHY', 'SENSITIVE'];
-        const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-        const randomScore = 2.5 + Math.random() * 2; // 2.5~4.5
-        
-        // 영문 감정을 한글로 변환
-        const emotionKorean: EmotionType = 
-          randomEmotion === 'JOY' ? '기쁨' :
-          randomEmotion === 'SADNESS' ? '슬픔' :
-          randomEmotion === 'ANGER' ? '분노' :
-          randomEmotion === 'APATHY' ? '무기력' : '예민';
-        
-        // mockData에 일기 추가 (createdAt 포함)
-        addDiaryEntry({
-          date: diaryData.date!,
-          emotion: randomEmotion,
-          score: randomScore,
-          note: getNote(randomEmotion, randomScore),
-          content: diaryData.content!,
-          keywords: diaryData.keywords!,
-          writeType: diaryData.writeType!,
-          createdAt: new Date().toISOString(), // 실제 작성 시각
-        });
-        
-        toast.success('감정 분석이 완료되었습니다.');
-        
-        // 분석 결과 생성 (한글 키로 접근)
-        const music = musicRecommendations[emotionKorean][0];
-        const challenge = challengeRecommendations[emotionKorean][0];
-        const reason = emotionReasons[emotionKorean][0];
-        const description = emotionDescriptions[emotionKorean];
-
-        setAnalysisResult({
-          id: `analysis-${Date.now()}`,
-          date: diaryData.date!,
-          emotion: emotionKorean,
-          confidence: Math.floor(Math.random() * 20) + 75, // 75-95%
-          reason,
-          description,
-          music,
-          challenge: undefined, // 과거 일기는 챌린지 없음
-        });
-        
-        // 콜백 호출하여 캘린더 갱신
-        onSave?.({
-          ...diaryData,
-          emotionType: emotionKorean,
-          analysisStatus: 'COMPLETED'
-        });
-      }, 1500);
-    } else {
-      // 오늘 일기 작성 시 기존 로직 유지
-      if (editingDiary) {
-        toast.success('일기가 수정되었습니다. 감정 재분석을 시작합니다.');
-      } else {
-        toast.success('일기를 저장했어요. 감정 분석을 시작합니다.');
+        toast.success("일기가 수정되었습니다!");
+        onSave?.(res.data);
+        return;
       }
 
-      onSave?.(diaryData);
+      // ✨ 새 일기 저장 (writeType 따라 URL 분기)
+      let res;
+
+      if (writeType === "TEXT") {
+        res = await api.post("/api/diaries", payload);
+      } 
+      else if (writeType === "VOICE") {
+        res = await api.post("/api/diaries/stt", payload);
+      } 
+      else if (writeType === "HANDWRITING") {
+
+        // canvas로 작성한 경우 → BASE64 필요
+        if (imagePreview && imagePreview.startsWith("data:image")) {
+          res = await api.post("/api/diaries/canvas", {
+            date: dateStr,
+            content: content.trim(),
+            canvasImageBase64: imagePreview, // 백엔드 요구 필드
+            keywordIds: payload.keywordIds,
+            emotionType: payload.emotionType,
+          });
+        } else {
+          // 이미 업로드 이미지(OCR) 사용 → 일반 TEXT 저장으로 처리
+          res = await api.post("/api/diaries", payload);
+        }
+      }
+
+      toast.success("일기가 저장되었습니다!");
+      onSave?.(res.data);
+
+    } catch (e) {
+      console.error("일기 저장 실패:", e);
+      toast.error("일기 저장 중 문제가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -607,72 +600,59 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
       {/* Keywords */}
       {!isEasyMode && (
-      <Card className="bg-card mb-4 border-border">
-        <CardContent className="p-4">
-          <Label className="text-sm mb-2 block text-foreground">
-            키워드 ({selectedKeywords.length}/5)
-          </Label>
-          
-          {/* 선택된 키워드 */}
-          {selectedKeywords.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
-              {selectedKeywords.map((keyword) => (
-                <div
-                  key={keyword}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-primary text-white"
-                >
-                  <span>{keyword}</span>
-                  <button
-                    onClick={() => toggleKeyword(keyword)}
-                    className="hover:bg-white/20 rounded-full p-0.5 transition-colors"
+        <Card className="bg-card mb-4 border-border">
+          <CardContent className="p-4">
+            <Label className="text-sm mb-2 block text-foreground">
+              키워드 ({selectedKeywords.length}/5) 
+              {editingDiary && <span className="text-xs text-muted-foreground ml-1">(변경 불가)</span>}
+            </Label>
+
+            {/* 선택된 키워드 */}
+            {selectedKeywords.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                {selectedKeywords.map((keyword) => (
+                  <div
+                    key={keyword}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-primary text-white"
                   >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                    <span>{keyword}</span>
 
-          {/* 키워드 입력 */}
-          <div className="flex gap-2 mb-3">
-            <Input
-              value={keywordInput}
-              onChange={(e) => setKeywordInput(e.target.value)}
-              onKeyPress={handleKeywordInputKeyPress}
-              placeholder="새 키워드 입력"
-              className="flex-1 border-border bg-background text-foreground"
-              maxLength={10}
-              disabled={selectedKeywords.length >= 5}
-            />
-            <Button
-              onClick={addCustomKeyword}
-              disabled={selectedKeywords.length >= 5 || !keywordInput.trim()}
-              size="icon"
-              className="bg-primary hover:bg-primary/90 text-white"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* 미리 등록된 키워드 */}
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">등록된 키워드에서 선택</p>
-            <div className="flex flex-wrap gap-2">
-              {getUserKeywords()
-                .filter(kw => !selectedKeywords.includes(kw.content))
-                .map((keyword) => (
-                  <KeywordChip
-                    key={keyword.id}
-                    keyword={keyword.content}
-                    selected={false}
-                    onToggle={() => toggleKeyword(keyword.content)}
-                    disabled={selectedKeywords.length >= 5}
-                  />
+                    {/* 수정 모드일 때는 삭제버튼 없앰 */}
+                    {!editingDiary && (
+                      <button
+                        onClick={() => toggleKeyword(keyword)}
+                        className="hover:bg-white/20 rounded-full p-0.5 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            )}
+
+            {/* 등록된 키워드에서 선택 (수정 모드에서는 숨김) */}
+            {!editingDiary && (
+              <div className="space-y-2 max-w-full">
+                <p className="text-xs text-muted-foreground">등록된 키워드에서 선택</p>
+
+                <div className="flex flex-wrap gap-2">
+                  {userKeywords
+                    .filter(kw => !selectedKeywords.includes(kw.content))
+                    .map(kw => (
+                      <KeywordChip
+                        key={kw.id}
+                        keyword={kw.content}
+                        selected={selectedKeywords.includes(kw.content)}
+                        onToggle={() => toggleKeyword(kw.content)}
+                        disabled={selectedKeywords.length >= 5}
+                      />
+                    ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Write Type Tabs */}
@@ -792,7 +772,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                 {sttStatus === 'processing' && (
                   <div className="w-full h-32 border border-border rounded-lg flex flex-col items-center justify-center gap-2">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                    <p className="text-sm text-primary">음성을 전사하고 있습니다...</p>
+                    <p className="text-sm text-primary">음성을 변환하고 있습니다...</p>
                   </div>
                 )}
 
@@ -801,21 +781,17 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                     <div className="p-3 rounded-lg flex items-center justify-between gap-2 bg-primary/10">
                       <div className="flex items-center gap-2">
                         <CheckCircle className="w-5 h-5 text-primary" />
-                        <p className="text-sm text-primary">전사 완료</p>
+                        <p className="text-sm text-primary">변환 완료</p>
                       </div>
-                      <Button
-                        onClick={() => setSttStatus('idle')}
-                        variant="ghost"
-                        size="sm"
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => setSttStatus("idle")}>
                         다시 녹음
                       </Button>
                     </div>
+
                     <Textarea
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      className="min-h-[150px] border border-border resize-none bg-background text-foreground"
-                      placeholder="전사된 내용을 수정할 수 있습니다..."
+                      className="min-h-[150px] border border-border resize-none"
                     />
                   </div>
                 )}
@@ -824,7 +800,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                   <div className="space-y-2">
                     <div className="p-3 rounded-lg flex items-center gap-2 bg-red-50 dark:bg-red-950/20">
                       <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />
-                      <p className="text-sm text-red-600 dark:text-red-400">녹음 실패</p>
+                      <p className="text-sm text-red-600 dark:text-red-400">녹음 실패: 녹음은 하루에 한 번만 분석 가능합니다.</p>
                     </div>
                     <Button
                       onClick={() => setSttStatus('idle')}
@@ -844,7 +820,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                 <Label className="text-sm mb-2 block text-foreground">
                   손글씨 작성
                 </Label>
-                
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -853,7 +829,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                   className="hidden"
                 />
 
-                {ocrStatus === 'idle' && !imagePreview && (
+                {ocrAllowed ? (
                   <div className="space-y-2">
                     {/* 캔버스 */}
                     <div className="relative border-2 border-border rounded-lg overflow-hidden bg-white">
@@ -870,8 +846,8 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                         onLoad={initCanvas}
                       />
                     </div>
-                    
-                    {/* 캔버스 컨트롤 버튼 */}
+
+                    {/* 캔버스 버튼 */}
                     <div className="flex gap-2">
                       <Button
                         onClick={clearCanvas}
@@ -881,6 +857,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                         <Trash2 className="w-4 h-4 mr-1" />
                         지우기
                       </Button>
+
                       <Button
                         onClick={recognizeHandwriting}
                         className="flex-1 bg-primary text-white hover:bg-primary/90"
@@ -890,9 +867,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                       </Button>
                     </div>
 
-                    <div className="text-center text-xs text-muted-foreground">
-                      또는
-                    </div>
+                    <div className="text-center text-xs text-muted-foreground">또는</div>
 
                     <Button
                       onClick={() => fileInputRef.current?.click()}
@@ -903,6 +878,10 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                       <span className="text-foreground">이미지 업로드</span>
                     </Button>
                   </div>
+                ) : (
+                  <p className="text-center text-sm text-red-500 py-6">
+                    손글씨는 하루에 한 번만 분석 가능합니다.
+                  </p>
                 )}
 
                 {ocrStatus === 'processing' && (
@@ -968,6 +947,12 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
           </Tabs>
         </CardContent>
       </Card>
+
+      {content.trim().length > 0 && content.trim().length < MINIMUM_LENGTH && (
+        <p className="text-center text-red-500 text-sm mb-2">
+          최소 {MINIMUM_LENGTH}자 이상 작성해주세요. ({content.trim().length}자)
+        </p>
+      )}
 
       {/* 저장 버튼 */}
       <div className="flex justify-center mb-4">

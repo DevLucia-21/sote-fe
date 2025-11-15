@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as Tone from "tone";
+import api from '../services/api';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Search, Settings, Play, Square } from 'lucide-react';
 import { Button } from './ui/button';
@@ -13,7 +14,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { CalendarCell } from './calendar/CalendarCell';
 import { DiaryDetailView } from './calendar/DiaryDetailView';
 import { DiarySearchDialog } from './calendar/DiarySearchDialog';
-import { getDiaryByDate } from './calendar/mockData';
 import { emotionColors, getEmotionLabel, getNote } from './calendar/noteMapping';
 import { DiaryEntry, NoteType } from './calendar/types';
 import { DiaryWrite } from './diary/DiaryWrite';
@@ -54,6 +54,15 @@ const SOUNDFONT_BASE =
 export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
   const samplerRef = React.useRef<Tone.Sampler | null>(null);
   const [samplerLoaded, setSamplerLoaded] = useState(false);
+  const [monthNotes, setMonthNotes] = useState<Record<string, any>>({});
+  const [userCharacter, setUserCharacter] = useState("PIANO");
+  const characterToInstrument: Record<string, string> = {
+    "PIANO": "piano",
+    "VIOLIN": "violin",
+    "GUITAR": "guitar",
+    "FLUTE": "flute",
+    "MARIMBA": "marimba",
+  };
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDiary, setSelectedDiary] = useState<DiaryEntry | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -93,10 +102,22 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  const handleCellClick = (date: string) => {
-    const diary = getDiaryByDate(date);
-    if (diary) {
-      setSelectedDiary(diary);
+  const handleCellClick = async (date: string) => {
+    try {
+      // 백엔드에서 해당 날짜의 상세 일기 가져오기
+      const res = await api.get(`/api/diaries?date=${date}`);
+
+      if (!res.data) {
+        toast.error("해당 날짜의 일기를 찾을 수 없어요.");
+        return;
+      }
+
+      // 이제 id가 포함된 full diary를 상태에 넣는다
+      setSelectedDiary(res.data);
+
+    } catch (err) {
+      console.error("❌ 일기 상세 조회 실패:", err);
+      toast.error("일기 데이터를 불러오지 못했습니다.");
     }
   };
 
@@ -119,7 +140,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
   // 쉼표 클릭 시 과거 일기 작성
   const handleRestClick = (dateStr: string) => {
-    const diary = getDiaryByDate(dateStr);
+    const diary = monthNotes[dateStr];
     if (diary) {
       toast.error('이미 일기가 작성된 날짜입니다.');
       return;
@@ -138,20 +159,73 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     setCurrentDate(new Date(currentDate));
   };
 
+  // 일기 데이터 가져오기
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const currentRes = await api.get(`/api/calendar-notes/${year}/${month + 1}`);
+
+        const prevMonth = month + 1 === 1 ? 12 : month;
+        const prevYear = month + 1 === 1 ? year - 1 : year;
+
+        const nextMonth = month + 1 === 12 ? 1 : month + 2;
+        const nextYear = month + 1 === 12 ? year + 1 : year;
+
+        const [prevRes, nextRes] = await Promise.all([
+          api.get(`/api/calendar-notes/${prevYear}/${prevMonth}`),
+          api.get(`/api/calendar-notes/${nextYear}/${nextMonth}`)
+        ]);
+
+        const all = [...prevRes.data, ...currentRes.data, ...nextRes.data];
+
+        // 날짜 기반 매핑 생성
+        const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
+          '기쁨': 'JOY',
+          '슬픔': 'SADNESS',
+          '분노': 'ANGER',
+          '무기력': 'APATHY',
+          '예민': 'SENSITIVE'
+        };
+
+        const map: Record<string, any> = {};
+        all.forEach((n) => {
+          const dateStr = n.date.split("T")[0];
+          map[dateStr] = {
+            ...n,
+            emotion: emotionMap[n.emotionLabel] || 'APATHY',
+            contentLength: n.contentLength || 0,
+          };
+        });
+
+        setMonthNotes(map);
+      } catch (e) {
+        console.error("월별 일기 불러오기 실패:", e);
+      }
+    };
+
+    fetchNotes();
+  }, [year, month]);
+
   // 악기 음 샘플 가져오기
   useEffect(() => {
     const loadSampler = async () => {
       try {
-        const profileData = localStorage.getItem("profileData");
-        let instrument = "piano";
-
-        if (profileData) {
-          const parsed = JSON.parse(profileData);
-          instrument = (parsed.character || "PIANO").toLowerCase();
+        // 1. 프로필 불러오기
+        let character = "PIANO";
+        try {
+          const res = await api.get("/api/users/profile");
+          character = res?.data?.character?.toUpperCase() || "PIANO";
+        } catch (err) {
+          console.error("프로필 불러오기 실패:", err);
         }
 
+        setUserCharacter(character);
+
+        // 2. 캐릭터 → 악기 매핑
+        const instrument = (characterToInstrument[character] || "piano").toLowerCase();
         const instPath = INSTRUMENT_MAP[instrument];
 
+        // 3. 샘플러 로드
         const sampler = new Tone.Sampler({
           urls: {
             C4: "C4.mp3",
@@ -269,7 +343,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       let index = 0;
       for (let day = 1; day <= daysInMonth; day++) {
         const dateKey = getDayKey(day);
-        const diary = getDiaryByDate(dateKey);
+        const diary = monthNotes[dateKey];
 
         if (diary) {
           const note = getNote(diary.emotion, diary.score);
@@ -469,8 +543,8 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
             {Array.from({ length: daysInMonth }, (_, i) => {
               const day = i + 1;
               const dayKey = getDayKey(day);
-              const diaryEntry = getDiaryByDate(dayKey);
-              
+              const diaryEntry = monthNotes[dayKey];
+
               // Check if this date is in the past (before today)
               const cellDate = new Date(year, month, day);
               const today = new Date();

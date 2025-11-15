@@ -17,7 +17,21 @@ interface CalendarCellProps {
   isEasyMode?: boolean; // 쉬운 모드 여부
 }
 
+function seededRandom(dateStr: string): number {
+  // 문자열을 숫자 seed로 변환
+  let seed = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    seed = (seed * 31 + dateStr.charCodeAt(i)) % 233280;
+  }
+
+  // 0 ~ 1 사이 랜덤값 반환
+  return seed / 233280;
+}
+
 export function CalendarCell({ day, isEmpty = false, diaryEntry, isPastDate = false, dateStr = '', onCellClick, onRestClick, noteSize = 35, cellHeight = 140, isEasyMode = false }: CalendarCellProps) {
+  const randomRatio = seededRandom(dateStr); // 0 ~ 1 사이 고정 랜덤
+  const randomContentLength = Math.floor(randomRatio * 300) + 1;
+  
   const hasEntry = !!diaryEntry;
   
   const handleClick = () => {
@@ -62,12 +76,12 @@ export function CalendarCell({ day, isEmpty = false, diaryEntry, isPastDate = fa
       </span>
       
       {/* Note head (only if diary entry exists) */}
-      {hasEntry && diaryEntry && diaryEntry.content && (
+      {hasEntry && diaryEntry && (
         <NoteHead
           note={diaryEntry.note}
           emotion={diaryEntry.emotion}
           score={diaryEntry.score}
-          contentLength={diaryEntry.content.length}
+          contentLength={randomContentLength}
           onClick={handleClick}
           size={noteSize}
         />

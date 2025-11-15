@@ -13,7 +13,7 @@ interface NoteHeadProps {
   size?: number; // 쉬운 모드에서 음표 크기 직접 지정
 }
 
-export function NoteHead({ note, emotion, score, contentLength, onClick, size }: NoteHeadProps) {
+export function NoteHead({ note, emotion, score, contentLength, onClick, size }: NoteHeadProps) {  
   const [isHovered, setIsHovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
