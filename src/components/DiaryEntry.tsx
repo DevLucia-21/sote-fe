@@ -9,20 +9,12 @@ import { Badge } from './ui/badge';
 import { TextDiaryWrite } from './diary/TextDiaryWrite';
 import { OCRPreview } from './diary/OCRPreview';
 import { STTTranscribe } from './diary/STTTranscribe';
-import { Diary } from './diary/types';
-import { getTodayQuestion } from './questions/mockData';
 import { AnswerSheet } from './questions/AnswerSheet';
-import { mockKeywords } from './diary/mockData';
 import { KeywordChip } from './diary/KeywordChip';
+import { isDailyQuestionEnabled } from "../utils/settings";
 import { AnalysisLoading } from './analysis/AnalysisLoading';
 import { AnalysisResult } from './analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType, EmotionType } from './analysis/types';
-import {
-  musicRecommendations,
-  challengeRecommendations,
-  emotionReasons,
-  emotionDescriptions,
-} from './analysis/mockData';
 import {
   Type,
   Mic,
@@ -46,10 +38,13 @@ interface DiaryEntryProps {
 export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   const [showDiaryExistsModal, setShowDiaryExistsModal] = useState(false);
   const [isWriting, setIsWriting] = useState(false);
+  const showQuestion = isDailyQuestionEnabled();
   const [showQuestionSheet, setShowQuestionSheet] = useState(false);
   const [hasAnswer, setHasAnswer] = useState(false); // Mock: 답변 여부
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
+  const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
+  const [analysisRequest, setAnalysisRequest] = useState<any>(null);
 
   //해당 날짜의 일기 여부 확인
   const checkDiaryExists = async (year: string, month: string, day: string) => {
@@ -60,7 +55,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     const dateStr = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
 
     try {
-      const res = await api.get(`/diaries`, { params: { date: dateStr } });
+      const res = await api.get(`/api/diaries`, { params: { date: dateStr } });
 
       console.log("📌 checkDiaryExists 응답:", res.data);
 
@@ -90,22 +85,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     return 'PIANO';
   };
   
-  // localStorage에서 오늘의 질문 활성화 설정 가져오기
-  const getDailyQuestionEnabled = (): boolean => {
-    const settingsData = localStorage.getItem('settingsData');
-    if (settingsData) {
-      try {
-        const parsed = JSON.parse(settingsData);
-        return parsed.dailyQuestionEnabled !== false; // 기본값 true
-      } catch (e) {
-        return true;
-      }
-    }
-    return true;
-  };
-  
-  const dailyQuestionEnabled = getDailyQuestionEnabled();
-  
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -114,10 +93,14 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   const [selectedYear, setSelectedYear] = useState(currentYear.toString());
   const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
   const [selectedDay, setSelectedDay] = useState(currentDay.toString());
+  const selectedDateStr = `${selectedYear}-${selectedMonth.padStart(2, "0")}-${selectedDay.padStart(2, "0")}`;
   
   const [keywords, setKeywords] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
+  const [userKeywords, setUserKeywords] = useState([]);
   
+  const [todayQuestion, setTodayQuestion] = useState(null);
+
   const [diaryType, setDiaryType] = useState<DiaryType>('text');
 
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
@@ -167,43 +150,22 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     checkDiaryExists(selectedYear, selectedMonth, selectedDay);
   }, [selectedYear, selectedMonth, selectedDay]);
 
-  const todayQuestion = getTodayQuestion();
+  // 오늘의 질문 가져오기
+  useEffect(() => {
+    api.get("/questions/today")
+      .then(res => setTodayQuestion(res.data))
+      .catch(() => setTodayQuestion(null));
+  }, []);
 
-  // localStorage에서 사용자 키워드 목록 가져오기
-  const getUserKeywords = () => {
-    const saved = localStorage.getItem('userKeywords');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return mockKeywords;
-      }
-    }
-    return mockKeywords;
-  };
-
-  const handleAddKeyword = () => {
-    if (!newKeyword.trim()) {
-      toast.error('키워드를 입력해주세요.');
-      return;
-    }
-    if (newKeyword.trim().length > 10) {
-      toast.error('키워드는 10자 이하로 입력해주세요.');
-      return;
-    }
-    if (keywords.includes(newKeyword.trim())) {
-      toast.error('이미 추가된 키워드입니다.');
-      setNewKeyword('');
-      return;
-    }
-    if (keywords.length >= 5) {
-      toast.error('키워드는 최대 5개까지만 추가할 수 있습니다.');
-      return;
-    }
-    setKeywords([...keywords, newKeyword.trim()]);
-    setNewKeyword('');
-    toast.success(`"${newKeyword.trim()}" 키워드를 추가했습니다.`);
-  };
+  // 사용자 키워드 목록 가져오기
+  useEffect(() => {
+    api.get("/api/users/keywords")
+      .then(res => {
+        console.log("📌 키워드 API 응답:", res.data);
+        setUserKeywords(res.data);
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   const handleRemoveKeyword = (keyword: string) => {
     setKeywords(keywords.filter(k => k !== keyword));
@@ -236,23 +198,53 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     setIsWriting(true);
   };
 
-  const handleSave = (diary: Partial<Diary>) => {
-    console.log('Saved diary:', diary);
-    // 일기 저장 후 분석 시작
-    setIsWriting(false);
-    setAnalysisState('analyzing');
-  };
+  const handleSave = async (diary) => {
+    try {
+      const payload = {
+        content: diary.content,
+        date: `${selectedYear}-${selectedMonth.padStart(2,"0")}-${selectedDay.padStart(2,"0")}`,
+        keywordIds: userKeywords
+            .filter(kw => keywords.includes(kw.content))
+            .map(kw => kw.id),
+        emotionType: null,   // 또는 제외 가능
+      };
 
-  const handleAnalysisComplete = () => {
-    // 분석 완료 후 결과 생성
-    const mockResult = generateMockAnalysisResult();
-    setAnalysisResult(mockResult);
-    setAnalysisState('completed');
+      let res;
+      if (diaryType === "text") {
+        res = await api.post("/api/diaries", payload);
+      } 
+      else if (diaryType === "voice") {
+        res = await api.post("/api/diaries/stt", payload);
+      } 
+      else if (diaryType === "handwriting") {
+        res = await api.post("/api/diaries/canvas", {
+          ...payload,
+          canvasImageBase64: diary.imageBase64 ?? null
+        });
+      }
+
+      const savedDiaryId = res.data.id;
+
+      setPendingAnalysisPayload({
+        diaryId: savedDiaryId,
+        content: diary.content,
+        date: payload.date,
+        keywordIds: payload.keywordIds
+      });
+
+      setAnalysisState("analyzing");
+    } catch (err) {
+      toast.error("일기 저장 실패");
+    }
   };
 
   const handleAnalysisRetry = () => {
-    // 분석 재시도
-    setAnalysisState('analyzing');
+    if (!pendingAnalysisPayload) {
+      toast.error("재시도할 데이터가 없습니다.");
+      return;
+    }
+    
+    setAnalysisState("analyzing");
   };
 
   const handleAnalysisBack = () => {
@@ -323,8 +315,12 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     return (
       <AnalysisLoading
         instrument="piano"
+        payload={pendingAnalysisPayload}
         onRetry={handleAnalysisRetry}
-        onComplete={handleAnalysisComplete}
+        onComplete={(result) => {
+          setAnalysisResult(result);
+          setAnalysisState("completed");
+        }}
       />
     );
   }
@@ -337,6 +333,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         instrument="piano"
         onAcceptChallenge={handleAcceptChallenge}
         characterType={getCharacterType()}
+        onBack={handleAnalysisBack}
       />
     );
   }
@@ -361,29 +358,67 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
     }
     
     if (diaryType === 'voice') {
-      return <STTTranscribe 
-        onBack={handleBack} 
-        onSave={(data) => {
-          console.log('STT saved:', data);
-        }} 
-        onStartAnalysis={() => {
-          setIsWriting(false);
-          setAnalysisState('analyzing');
-        }}
-      />;
+      return (
+        <STTTranscribe
+          selectedDate={selectedDateStr}
+          userKeywords={userKeywords}
+          onBack={handleBack}
+
+          onSave={async (data) => {
+            await handleSave(data);
+          }}
+
+          onStartAnalysis={(analysisRequest) => {
+            console.log("🟣 [DEBUG] --- DiaryEntry.onStartAnalysis ---");
+            console.log("📨 전달받은 analysisRequest:", analysisRequest);
+
+            console.log("📍 diaryId =", analysisRequest.diaryId);
+            console.log("📍 text =", analysisRequest.text);
+            console.log("📍 genreIds =", analysisRequest.genreIds);
+
+            setPendingAnalysisPayload({
+              diaryId: analysisRequest.diaryId,
+              content: analysisRequest.text,
+              date: selectedDateStr,
+              keywordIds: analysisRequest.genreIds,
+            });
+
+            setAnalysisState('analyzing');
+          }}
+        />
+      );
     }
     
     if (diaryType === 'handwriting') {
-      return <OCRPreview 
-        onBack={handleBack} 
-        onSave={(data) => {
-          console.log('OCR saved:', data);
-        }}
-        onStartAnalysis={() => {
-          setIsWriting(false);
-          setAnalysisState('analyzing');
-        }}
-      />;
+      return (
+        <OCRPreview
+          selectedDate={selectedDateStr}
+          userKeywords={userKeywords}
+          onBack={handleBack}
+
+          onSave={async (data) => {
+            await handleSave(data);
+          }}
+
+          onStartAnalysis={(analysisRequest) => {
+            console.log("🟣 [DEBUG] --- DiaryEntry.onStartAnalysis ---");
+            console.log("📨 전달받은 analysisRequest:", analysisRequest);
+
+            console.log("📍 diaryId =", analysisRequest.diaryId);
+            console.log("📍 text =", analysisRequest.text);
+            console.log("📍 genreIds =", analysisRequest.genreIds);
+
+            setPendingAnalysisPayload({
+              diaryId: analysisRequest.diaryId,
+              content: analysisRequest.text,
+              date: selectedDateStr,
+              keywordIds: analysisRequest.genreIds,
+            });
+
+            setAnalysisState('analyzing');
+          }}
+        />
+      );
     }
   }
 
@@ -473,7 +508,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
             </div>
           )}
 
-          {/* 키워드 입력 */}
+          {/* 키워드 입력
           <div className="flex gap-2 mb-3">
             <Input
               value={newKeyword}
@@ -497,13 +532,13 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
             >
               <Plus className="w-4 h-4" />
             </Button>
-          </div>
+          </div> */}
 
           {/* 미리 등록된 키워드 */}
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">등록된 키워드에서 선택</p>
             <div className="flex flex-wrap gap-2">
-              {getUserKeywords()
+              {userKeywords
                 .filter(kw => !keywords.includes(kw.content))
                 .map((keyword) => (
                   <KeywordChip
@@ -520,7 +555,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       </Card>
 
       {/* 3. 오늘의 질문 카드 - 설정에서 활성화된 경우에만 표시 */}
-      {dailyQuestionEnabled && (
+      {showQuestion && todayQuestion && (
         <Card className="bg-card mb-4 border-border">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">

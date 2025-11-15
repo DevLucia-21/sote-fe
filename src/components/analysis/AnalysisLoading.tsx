@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Music, Guitar, Piano, Mic2 } from 'lucide-react';
 import { Progress } from '../ui/progress';
 import { Button } from '../ui/button';
 import { InstrumentType, AnalysisStage } from './types';
 import { loadingMessages } from './mockData';
 import { characterInfo } from '../common/characterImages';
+import api from "../../services/api";
 
 interface AnalysisLoadingProps {
   instrument?: InstrumentType;
   onRetry?: () => void;
-  onComplete?: () => void;
+  onComplete?: (result: any) => void;   // ★ 분석 결과 전달
+  payload: any;                         // ★ 분석 요청 payload
 }
 
 const stages: { stage: AnalysisStage; label: string }[] = [
@@ -19,109 +20,220 @@ const stages: { stage: AnalysisStage; label: string }[] = [
   { stage: 'music', label: '음악 추천 중' },
 ];
 
-const instrumentIcons: Record<InstrumentType, typeof Music> = {
-  guitar: Guitar,
-  piano: Piano,
-  drum: Music,
-  violin: Music,
-  saxophone: Mic2,
+const instrumentInfoMap: Record<InstrumentType, { image: string; name: string }> = {
+  piano: characterInfo.PIANO,
+  guitar: characterInfo.GUITAR,
+  marimba: characterInfo.MARIMBA,
+  violin: characterInfo.VIOLIN,
+  flute: characterInfo.FLUTE,
 };
+
+function mapBackendToFrontend(raw: any) {
+  return {
+    date: raw.analysisDate,
+    emotion: raw.emotionLabel,
+    confidence: Math.round(raw.emotionScore * 100),
+    reason: raw.emotionReason,
+    description: raw.emotionReason,  // 동일 값 사용
+    music: raw.selectedTrackTitle
+      ? {
+          genre: raw.selectedTrackGenre,
+          title: raw.selectedTrackTitle,
+          artist: raw.selectedTrackArtist,
+          album: raw.selectedTrackAlbum,
+          range: raw.selectedTrackRange,
+        }
+      : null,
+    challenge: raw.challenge || null,
+  };
+}
 
 export function AnalysisLoading({ 
   instrument = 'piano', 
   onRetry,
-  onComplete 
+  onComplete,
+  payload
 }: AnalysisLoadingProps) {
-  const [currentStage, setCurrentStage] = useState<number>(0);
+
+  const [currentStage, setCurrentStage] = useState(0);
   const [progress, setProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
-  const [isError, setIsError] = useState(false);
-  const [isTimeout, setIsTimeout] = useState(false);
+  const [userCharacterImage, setUserCharacterImage] = useState<string | null>(null);
 
-  // 사용자 악기 이미지 가져오기
-  const [userInstrumentImage, setUserInstrumentImage] = useState<string | null>(null);
-  
+  const [isError, setIsError] = useState(false);  // ★ 빠져있던 코드 복구
+
+  const hasRunRef = useRef(false);
+  const analysisResultRef = useRef<any>(null);
+
   useEffect(() => {
-    try {
-      const savedProfile = localStorage.getItem('profileData');
-      if (savedProfile) {
-        const profile = JSON.parse(savedProfile);
-        const characterKey = profile.character as keyof typeof characterInfo;
-        if (characterKey && characterInfo[characterKey]?.image) {
-          setUserInstrumentImage(characterInfo[characterKey].image);
+    async function fetchCharacter() {
+      try {
+        const res = await api.get("/api/users/profile");
+        const key = res.data.character?.toUpperCase();
+        if (key && characterInfo[key]) {
+          setUserCharacterImage(characterInfo[key].image);
         }
+      } catch (err) {
+        console.error("캐릭터 API 실패:", err);
       }
-    } catch (e) {
-      console.error('Failed to load user instrument image:', e);
     }
+    fetchCharacter();
   }, []);
 
-  const InstrumentIcon = instrumentIcons[instrument];
+  const instrumentInfo = instrumentInfoMap[instrument];
 
   useEffect(() => {
-    // Simulate analysis progress
     const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          if (onComplete) {
-            setTimeout(() => onComplete(), 500);
-          }
-          return 100;
-        }
-        return prev + 2;
-      });
+      setProgress((prev) => Math.min(prev + 2, 100));
     }, 150);
 
-    // Update stages
     const stageInterval = setInterval(() => {
-      setCurrentStage((prev) => {
-        if (prev < 2) return prev + 1;
-        return prev;
-      });
+      setCurrentStage((prev) => Math.min(prev + 1, 2));
     }, 5000);
 
-    // Rotate messages
     const messageInterval = setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % loadingMessages.length);
     }, 3000);
-
-    // Simulate timeout after 30 seconds
-    const timeoutTimer = setTimeout(() => {
-      setIsTimeout(true);
-    }, 30000);
 
     return () => {
       clearInterval(progressInterval);
       clearInterval(stageInterval);
       clearInterval(messageInterval);
-      clearTimeout(timeoutTimer);
     };
-  }, [onComplete]);
+  }, []);
 
-  if (isTimeout || isError) {
+  async function fetchChallenge() {
+    try {
+      const res = await api.get("/api/challenge/today");
+      return res.data;
+    } catch (err: any) {
+      if (err.response?.data?.message?.includes("이미 추천")) {
+        const res2 = await api.get("/api/challenge/status");
+        return res2.data.challenge || res2.data;
+      }
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    console.log("🟢 [DEBUG] AnalysisLoading 시작");
+    console.log("📦 들어온 payload:", payload);
+  }, [payload]);
+
+  /** ---------------------------
+   *  1) 서버 분석 요청
+   ---------------------------- */
+  useEffect(() => {
+    if (hasRunRef.current) return;
+    hasRunRef.current = true;
+
+    async function runAnalysis() {
+      console.log("🔵 [DEBUG] 분석 시작");
+      console.log("🔵 [DEBUG] payload:", payload);
+
+      try {
+        const res = await api.post("/api/analysis", payload);
+        const challenge = await fetchChallenge();
+        analysisResultRef.current = mapBackendToFrontend({
+          ...res.data,
+          challenge,
+        });
+
+        console.log("🟢 [DEBUG] POST 성공");
+        console.log("🟢 [DEBUG] 전체 응답:", res);
+        console.log("🟢 [DEBUG] 응답 데이터:", res.data);
+
+        if (progress >= 100) {
+          console.log("🟢 [DEBUG] progress 100 → onComplete 호출");
+          onComplete?.(analysisResultRef.current);
+        }
+      } catch (err: any) {
+        console.error("🔴 [DEBUG] POST 에러:", err);
+
+        if (err.response?.status === 409) {
+          console.warn("🟡 [DEBUG] 409 발생 → 기존 분석 결과 GET 요청");
+
+          try {
+            const res2 = await api.get(`/api/analysis/${payload.diaryId}`);
+            const challenge = await fetchChallenge();
+            analysisResultRef.current = mapBackendToFrontend({
+              ...res2.data,
+              challenge,
+            });
+
+            console.log("🟡 [DEBUG] GET 성공");
+            console.log("🟡 [DEBUG] GET 전체 응답:", res2);
+            console.log("🟡 [DEBUG] GET 데이터:", res2.data);
+
+            if (progress >= 100) {
+              console.log("🟡 [DEBUG] progress 100 → onComplete 호출");
+              onComplete?.(analysisResultRef.current);
+            }
+          } catch (getErr) {
+            console.error("🔴 [DEBUG] GET 분석 결과 실패:", getErr);
+            setIsError(true);
+          }
+        } else {
+          console.error("🔴 [DEBUG] 분석 실패 (409 아님):", err);
+          setIsError(true);
+        }
+      }
+    }
+
+    if (payload?.diaryId) {
+      runAnalysis();
+    }
+  }, [payload, progress, onComplete]);
+
+
+  /** ---------------------------
+   * 2) progress 증가 (0 → 100)
+   ---------------------------- */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setProgress(p => Math.min(p + 2, 100));
+    }, 150);
+    return () => clearInterval(timer);
+  }, []);
+
+
+  /** ---------------------------
+   * 3) Stage 진행도 업데이트
+   ---------------------------- */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentStage(s => Math.min(s + 1, 2));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+
+  /** ---------------------------
+   * 4) 메시지 변경
+   ---------------------------- */
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setMessageIndex(i => (i + 1) % loadingMessages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+
+  /** ---------------------------
+   * 5) 서버 결과 + progress 100 둘 다 되면 완료
+   ---------------------------- */
+  useEffect(() => {
+    if (progress === 100 && analysisResultRef.current) {
+      onComplete?.(analysisResultRef.current);
+    }
+  }, [progress, onComplete]);
+
+
+  if (isError) {
     return (
-      <div className="min-h-screen bg-[#F5F1E8] flex items-center justify-center p-6">
-        <div className="max-w-md w-full text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="w-20 h-20 mx-auto mb-6 rounded-full bg-[#5D3F35] flex items-center justify-center"
-          >
-            <InstrumentIcon className="w-10 h-10 text-white" />
-          </motion.div>
-          
-          <p className="text-[#4A3228] mb-8">
-            분석이 예상보다 오래 걸리고 있어요.
-          </p>
-
-          <Button
-            onClick={onRetry}
-            className="bg-[#7B8B4F] hover:bg-[#6a7a45] text-white"
-          >
-            다시 시도하기
-          </Button>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <p>분석 중 오류가 발생했어요.</p>
+        <Button onClick={onRetry}>다시 시도하기</Button>
       </div>
     );
   }
@@ -155,14 +267,14 @@ export function AnalysisLoading({
           >
             {/* Character Circle */}
             <div className="w-40 h-40 rounded-full bg-white shadow-lg flex items-center justify-center relative overflow-hidden">
-              {userInstrumentImage ? (
+              {userCharacterImage ? (
                 <img 
-                  src={userInstrumentImage} 
-                  alt="악기" 
+                  src={userCharacterImage}
+                  alt="캐릭터" 
                   className="w-28 h-28 object-contain z-10"
                 />
               ) : (
-                <InstrumentIcon className="w-20 h-20 text-[#7B8B4F] z-10" />
+                <img src={instrumentInfo.image}  className="w-20 h-20 text-[#7B8B4F] z-10" />
               )}
               
               {/* Animated Waves */}

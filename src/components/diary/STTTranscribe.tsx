@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
@@ -19,18 +20,29 @@ type RecordingStatus = 'idle' | 'recording' | 'stopped';
 interface STTTranscribeProps {
   onBack: () => void;
   onSave?: (data: STTSaveData) => void;
-  onStartAnalysis?: () => void;
+
+  // ✔ 분석 시작 요청은 분석 요청 객체를 받음
+  onStartAnalysis?: (analysisRequest: {
+    diaryId: number;
+    genreIds: number[];
+    text: string;
+  }) => void;
+
+  selectedDate: string;
+  userKeywords: { id: number, content: string }[];
 }
 
 export interface STTSaveData {
   userId: string;
-  text: string;
+  content: string;
   date: string;
   keywordIds?: number[];
   emotionType?: EmotionType;
 }
 
-export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribeProps) {
+export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, userKeywords }: STTTranscribeProps) {
+  console.log("📅 [DEBUG] STTTranscribe props.selectedDate =", selectedDate);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [status, setStatus] = useState<STTStatus>('idle');
@@ -74,19 +86,11 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
     checkMicPermission();
   }, []);
   
-  // 날짜 선택
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth() + 1;
-  const currentDay = currentDate.getDate();
-  
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
-  const [selectedDay, setSelectedDay] = useState(currentDay.toString());
-  
   // 키워드 관리
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [newKeyword, setNewKeyword] = useState('');
+  const realKeywordIds = userKeywords
+    .filter(kw => keywords.includes(kw.content))
+    .map(kw => kw.id);
   
   // 감정 선택
   const [selectedEmotion, setSelectedEmotion] = useState<EmotionType | 'none'>('none');
@@ -95,34 +99,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  // 년/월/일 옵션
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
-  const getAvailableMonths = () => {
-    if (parseInt(selectedYear) === currentYear) {
-      return Array.from({ length: currentMonth }, (_, i) => i + 1);
-    }
-    return Array.from({ length: 12 }, (_, i) => i + 1);
-  };
-  const months = getAvailableMonths();
-  
-  const getDaysInMonth = (year: number, month: number) => {
-    return new Date(year, month, 0).getDate();
-  };
-  
-  const getAvailableDays = () => {
-    const year = parseInt(selectedYear);
-    const month = parseInt(selectedMonth);
-    const maxDays = getDaysInMonth(year, month);
-    
-    if (year === currentYear && month === currentMonth) {
-      return Array.from({ length: currentDay }, (_, i) => i + 1);
-    }
-    return Array.from({ length: maxDays }, (_, i) => i + 1);
-  };
-  const days = getAvailableDays();
-
-  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -302,7 +278,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
     toast.success('녹음이 삭제되었습니다.');
   };
 
-  // 녹음 파일로 전사
+  // 녹음 파일로 변환
   const handleTranscribeRecording = async () => {
     if (!recordedAudio) {
       toast.error('녹음된 오디오가 없습니다.');
@@ -322,59 +298,96 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
     await handleTranscribeFile(selectedFile);
   };
 
+  // stt id 저장
+  const [sttId, setSttId] = useState<number | null>(null);
+
   const handleTranscribeFile = async (file: File) => {
     setStatus('transcribing');
 
     try {
+      const userId = Number(localStorage.getItem("user_id"));
+      if (!userId) {
+        toast.error("로그인 정보가 없습니다.");
+        setStatus("error");
+        return;
+      }
+
+      const diaryDate = new Date().toISOString().split("T")[0];
+      console.log("📤 [DEBUG] STT API 요청 날짜 =", diaryDate);
+      
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('user_id', 'mock-user-id');
+      formData.append("user_id", userId);
+      formData.append("diary_date", diaryDate);
       formData.append('do_vad', doVad.toString());
-      
-      const diaryDate = `${selectedYear}-${selectedMonth.padStart(2, '0')}-${selectedDay.padStart(2, '0')}`;
-      formData.append('diary_date', diaryDate);
 
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log("📤 STT API 요청 formData:", {
+        file: file.name,
+        user_id: userId,
+        diary_date: diaryDate,
+        do_vad: doVad,
+      });
 
-      const mockText = `오늘 하루는 정말 의미 있는 날이었어요. 아침에 일어나서 창밖을 보니 햇살이 너무 따뜻했고, 오랜만에 여유로운 아침을 즐길 수 있었습니다. 점심에는 친구와 만나서 맛있는 음식을 먹으며 즐거운 시간을 보냈어요.`;
+      const sttRes = await api.post("/ai/stt/transcribe", formData, {
+        baseURL: "http://localhost:8000",
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
-      setTranscribedText(mockText);
+      console.log("🟢 STT API 응답:", sttRes.data);
+
+      const { text, spring_id } = sttRes.data;
+      console.log("🟢 STT 응답 spring_id:", spring_id);
+
+      if (!text) {
+        toast.error("검사 결과가 비어 있어요. 다시 시도해 주세요.");
+        setStatus("error");
+        return;
+      }
+
+      setSttId(spring_id);
+      setTranscribedText(text);
       setStatus('success');
+
       toast.success('음성 변환이 완료되었습니다!');
     } catch (error: any) {
-      setStatus('error');
-      setErrorMessage('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
+      console.error("❌ STT 변환 실패:", error);
+
+      if (error?.response?.status === 429) {
+        toast.error("오늘의 음성 분석 사용량을 초과했습니다.");
+        setStatus("limit_exceeded");
+        return;
+      }
+
+      toast.error("변환 처리 중 오류가 발생했습니다.");
+      setErrorMessage("지금은 처리할 수 없어요. 잠시 후 다시 시도해주세요.");
       setShowErrorDialog(true);
+      setStatus("error");
     }
-  };
-
-  const handleRetry = () => {
-    setTranscribedText('');
-    setStatus('idle');
-  };
-
-  const handleAddKeyword = () => {
-    if (!newKeyword.trim()) {
-      toast.error('키워드를 입력해주세요.');
-      return;
-    }
-    if (keywords.includes(newKeyword.trim())) {
-      toast.error('이미 추가된 키워드입니다.');
-      return;
-    }
-    if (keywords.length >= 5) {
-      toast.error('키워드는 최대 5개까지만 추가할 수 있습니다.');
-      return;
-    }
-    setKeywords([...keywords, newKeyword.trim()]);
-    setNewKeyword('');
-  };
-
-  const handleRemoveKeyword = (keyword: string) => {
-    setKeywords(keywords.filter(k => k !== keyword));
   };
 
   const handleSaveAsDiary = async () => {
+    console.log("🟢 [DEBUG] --- handleSaveAsDiary() 실행됨 ---");
+    console.log("📅 selectedDate =", selectedDate);
+    console.log("📝 transcribedText =", transcribedText);
+    console.log("🔑 realKeywordIds =", realKeywordIds);
+    console.log("💛 selectedEmotion =", selectedEmotion);
+    console.log("🔊 sttId =", sttId);
+
+    console.log("📦 최종적으로 DiaryEntry로 전달될 onSave payload:", {
+      content: transcribedText,
+      date: selectedDate,
+      keywordIds: realKeywordIds,
+      emotionType: selectedEmotion !== "none" ? selectedEmotion : null
+    });
+    
+    if (!sttId) {
+      console.log("❌ [DEBUG] sttId 없음 -> 저장 중단");
+      toast.error("STT ID가 없어 저장할 수 없어요.");
+      return;
+    }
+
     if (!transcribedText.trim()) {
       toast.error('변환된 텍스트가 없습니다.');
       return;
@@ -388,32 +401,66 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
     setStatus('saving');
 
     try {
-      const saveData: STTSaveData = {
-        userId: 'mock-user-id',
-        text: transcribedText,
-        date: `${selectedYear}-${selectedMonth.padStart(2, '0')}-${selectedDay.padStart(2, '0')}`,
-        keywordIds: keywords.map((_, idx) => idx),
-        emotionType: selectedEmotion !== 'none' ? selectedEmotion : undefined
+      const token = localStorage.getItem("accessToken");
+      const userId = localStorage.getItem("user_id");
+
+      if (!token || !userId) {
+        toast.error("로그인 정보가 없습니다.");
+        return;
+      }
+
+      console.log("📤 [DEBUG] PUT /api/stt/results/", sttId, transcribedText);
+
+      await api.put(
+        `/api/stt/results/${sttId}`,
+        {
+          userId: Number(userId),
+          text: transcribedText
+        },
+        { headers: { Authorization: `Bearer ${token}` }}
+      );
+
+      console.log("🟢 [DEBUG] STT 결과 업데이트 성공");
+
+      const finalPayload = {
+        content: transcribedText,
+        date: selectedDate,
+        keywordIds: realKeywordIds,
+        emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
       };
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log("📤 [DEBUG] POST /api/diaries/stt payload:", finalPayload);
 
-      toast.success('저장했어요. 감정 분석을 시작합니다.');
+      const diaryRes = await api.post(
+        "/api/diaries/stt",
+        finalPayload,
+        { headers: { Authorization: `Bearer ${token}` }}
+      );
+
+      const diaryId = diaryRes.data.id;
+
+      toast.success("저장 완료! 감정 분석을 시작합니다.");
       
-      if (onSave) {
-        onSave(saveData);
-      }
+      if (onSave) onSave({
+        content: transcribedText,
+        date: selectedDate,
+        keywordIds: realKeywordIds,
+        emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
+      });
 
       // 감정 분석 화면으로 이동
       if (onStartAnalysis) {
-        onStartAnalysis();
-      } else {
-        onBack();
+        onStartAnalysis({
+          diaryId,
+          date: selectedDate,
+          keywordIds: realKeywordIds,
+          content: transcribedText,
+        });
       }
     } catch (error) {
-      setStatus('error');
-      setErrorMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
-      setShowErrorDialog(true);
+      console.error("❌ 저장 실패:", error);
+      toast.error("저장 중 문제가 발생했습니다.");
+      setStatus("error");
     }
   };
 
@@ -737,7 +784,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
         </Button>
       )}
 
-      {/* 전사 진행 중 */}
+      {/* 변환 진행 중 */}
       {status === 'transcribing' && (
         <Card className="bg-card mb-4 border-border">
           <CardContent className="p-8">
@@ -754,7 +801,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
         </Card>
       )}
 
-      {/* 전사 결과 */}
+      {/* 변환 결과 */}
       {status === 'success' && (
         <>
           <Card className="bg-card mb-4 border-border">
@@ -778,13 +825,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis }: STTTranscribe
 
           {/* 하단 버튼 */}
           <div className="flex gap-3 mb-3">
-            <Button
-              variant="outline"
-              onClick={handleRetry}
-              className="flex-1"
-            >
-              다시 전사
-            </Button>
             <Button
               onClick={handleSaveAsDiary}
               disabled={status === 'saving'}

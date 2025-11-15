@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -72,27 +73,40 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
 
   const loadExistingAnswer = async () => {
     try {
-      // Mock API: GET /api/questions/answers/{answerId}
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const today = new Date()
+      ;
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const formattedMonth = `${year}-${month}`;
 
-      // Mock existing answer
-      const mockAnswer: Answer = {
-        id: existingAnswerId!,
-        questionId: question.id,
-        questionContent: question.content,
-        questionDay: question.questionDay,
-        answerText: '오늘은 정말 좋은 하루였어요. 친구를 만나서 맛있는 음식을 먹고 즐거운 대화를 나눴습니다.',
-        answeredAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), // 5분 전
-        answerMonth: new Date().toISOString().substring(0, 7) + '-01',
-      };
+      // 👉 월별 내 답변 전체 조회
+      const res = await api.get("/api/questions/answers/me", {
+        params: { month: formattedMonth }
+      });
 
-      setAnswerText(mockAnswer.answerText);
+      if (!res.data || res.data.length === 0) return;
 
-      // 수정 가능 시간 계산 (10분 = 600초)
-      const answeredTime = new Date(mockAnswer.answeredAt).getTime();
-      const now = Date.now();
-      const elapsedSeconds = Math.floor((now - answeredTime) / 1000);
-      const remaining = 600 - elapsedSeconds; // 10분 = 600초
+      // 👉 오늘의 questionId + day가 일치하는 답변 찾기
+      const todayStr = today.toISOString().slice(0, 10);
+      const todayDay = today.getDate();
+
+      const myAnswer = res.data.find((item) => {
+        const answerDate = item.answeredAt.slice(0, 10);
+        return (
+          item.questionId === question.id && 
+          item.questionDay === todayDay &&     // 날짜 체킹 추가
+          answerDate === todayStr              // 날짜 완전 일치
+        );
+      });
+
+      if (!myAnswer) return;
+
+      setAnswerText(myAnswer.answerText);
+
+      // 수정 제한 시간 계산
+      const answeredAt = new Date(myAnswer.answeredAt).getTime();
+      const elapsedSeconds = Math.floor((Date.now() - answeredAt) / 1000);
+      const remaining = 600 - elapsedSeconds;
 
       if (remaining > 0) {
         setRemainingSeconds(remaining);
@@ -101,9 +115,10 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
         setRemainingSeconds(0);
         setCanEdit(false);
       }
-    } catch (error) {
-      console.error('기존 답변 로딩 실패:', error);
-      toast.error('답변을 불러올 수 없습니다.');
+
+    } catch (err) {
+      console.error("답변 불러오기 실패:", err);
+      toast.error("답변을 불러올 수 없습니다.");
     }
   };
 
@@ -114,63 +129,44 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
   };
 
   const handleSave = async () => {
-    if (!isValid) {
-      toast.error(`최소 ${minLength}자 이상 작성해주세요.`);
-      return;
-    }
+    if (!isValid) return toast.error(`최소 ${minLength}자 이상 작성해주세요.`);
 
-    if (isEditMode && !canEdit) {
-      toast.error('작성 후 10분이 지나 수정할 수 없어요.');
-      return;
-    }
-
-    setSaveStatus('saving');
+    setSaveStatus("saving");
 
     try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const formattedMonth = `${year}-${month}`;
+
       if (isEditMode && existingAnswerId) {
-        // Mock API: PUT /api/questions/answers/{answerId}
-        const updateRequest: UpdateAnswerRequest = {
-          answerText: answerText.trim(),
-        };
+        // 답변 수정
+        await api.put(`/api/questions/answers/${existingAnswerId}`, {
+          answerText: answerText.trim()
+        });
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Mock: 수정 제한 시간 체크 (서버에서도 체크)
-        if (!canEdit) {
-          throw new Error('FORBIDDEN');
-        }
-
-        console.log('답변 수정:', updateRequest);
       } else {
-        // Mock API: POST /api/questions/{qid}/answers
-        const createRequest: CreateAnswerRequest = {
+        // 새 답변 저장
+        await api.post(`/api/questions/${question.id}/answers`, {
           answerText: answerText.trim(),
-        };
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Mock: 중복 작성 체크 (서버에서 409 응답)
-        // 실제로는 매우 낮은 확률로 중복 발생
-        if (Math.random() < 0.1) {
-          throw new Error('CONFLICT');
-        }
-
-        console.log('답변 작성:', createRequest);
+          month: formattedMonth,
+        });
       }
 
-      setSaveStatus('success');
+      setSaveStatus("success");
       setShowSuccessDialog(true);
-    } catch (error: any) {
-      console.error('답변 저장 실패:', error);
-      setSaveStatus('error');
 
-      if (error.message === 'CONFLICT') {
-        setErrorMessage('이번 달에 이미 작성했어요');
-      } else if (error.message === 'FORBIDDEN') {
-        setErrorMessage('작성 후 10분이 지나 수정할 수 없어요');
+    } catch (err) {
+      setSaveStatus("error");
+
+      if (err.response?.status === 409) {
+        setErrorMessage("하루에 하나만 답변 가능합니다.");
+      } else if (err.response?.status === 403) {
+        setErrorMessage("작성 후 10분이 지나 수정할 수 없어요.");
       } else {
-        setErrorMessage('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
+        setErrorMessage("저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
+
       setShowErrorDialog(true);
     }
   };

@@ -12,6 +12,7 @@ interface AnalysisResultProps {
   instrument?: InstrumentType;
   onAcceptChallenge?: () => void;
   characterType?: CharacterType;
+  onBack?: () => void;
 }
 
 export function AnalysisResult({
@@ -19,7 +20,20 @@ export function AnalysisResult({
   instrument = 'piano',
   onAcceptChallenge,
   characterType = 'PIANO',
+  onBack,
 }: AnalysisResultProps) {
+  
+  console.group("🔍 [AnalysisResult Debug]");
+  console.log("📌 전달된 result 객체:", result);
+  console.log("📌 result.date:", result?.date);
+  console.log("📌 result.emotion:", result?.emotion);
+  console.log("📌 result.confidence:", result?.confidence);
+  console.log("📌 result.reason:", result?.reason);
+  console.log("📌 result.description:", result?.description);
+  console.log("📌 result.music:", result?.music);
+  console.log("📌 result.challenge:", result?.challenge);
+  console.groupEnd();
+
   const [showToast, setShowToast] = useState(true);
 
   // Show completion toast on mount

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
@@ -18,11 +19,20 @@ type OCRStatus = 'idle' | 'uploading' | 'success' | 'error' | 'limit_exceeded' |
 interface OCRPreviewProps {
   onBack: () => void;
   onSave?: (data: OCRSaveData) => void;
-  onStartAnalysis?: () => void;
+  
+  // ✔ 분석 시작 요청은 분석 요청 객체를 받음
+  onStartAnalysis?: (analysisRequest: {
+    diaryId: number;
+    genreIds: number[];
+    text: string;
+  }) => void;
+
+  selectedDate: string;
+  userKeywords: { id: number, content: string }[];
 }
 
 export interface OCRSaveData {
-  userId: string;
+  userId: number;
   content: string;
   imageUrl: string;
   date: string;
@@ -59,7 +69,7 @@ const templates = [
   },
 ];
 
-export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps) {
+export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, userKeywords }: OCRPreviewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<OCRStatus>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -70,19 +80,11 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
   const [selectedTemplate, setSelectedTemplate] = useState<OCRTemplate>('blank');
   const [canvasImageData, setCanvasImageData] = useState<string>('');
   
-  // 날짜 선택
-  const currentDate = new Date();
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth() + 1;
-  const currentDay = currentDate.getDate();
-  
-  const [selectedYear, setSelectedYear] = useState(currentYear.toString());
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
-  const [selectedDay, setSelectedDay] = useState(currentDay.toString());
-  
   // 키워드 관리
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [newKeyword, setNewKeyword] = useState('');
+  const realKeywordIds = userKeywords
+    .filter(kw => keywords.includes(kw.content))
+    .map(kw => kw.id);
   
   // 감정 선택
   const [selectedEmotion, setSelectedEmotion] = useState<EmotionType | 'none'>('none');
@@ -91,34 +93,6 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  // 년/월/일 옵션
-  const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
-  const getAvailableMonths = () => {
-    if (parseInt(selectedYear) === currentYear) {
-      return Array.from({ length: currentMonth }, (_, i) => i + 1);
-    }
-    return Array.from({ length: 12 }, (_, i) => i + 1);
-  };
-  const months = getAvailableMonths();
-  
-  const getDaysInMonth = (year: number, month: number) => {
-    return new Date(year, month, 0).getDate();
-  };
-  
-  const getAvailableDays = () => {
-    const year = parseInt(selectedYear);
-    const month = parseInt(selectedMonth);
-    const maxDays = getDaysInMonth(year, month);
-    
-    if (year === currentYear && month === currentMonth) {
-      return Array.from({ length: currentDay }, (_, i) => i + 1);
-    }
-    return Array.from({ length: maxDays }, (_, i) => i + 1);
-  };
-  const days = getAvailableDays();
-
-  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -175,31 +149,26 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
 
     setStatus('uploading');
 
-    // Mock API call - 실제로는 POST /api/ocr/preview 호출
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('user_id', 'mock-user-id'); // 실제로는 인증된 사용자 ID
+      formData.append('user_id', localStorage.getItem("user_id") || "");
 
-      // Mock response
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const res = await api.post("/api/ocr/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
 
-      // Mock success response
-      const mockText = `안녕하세요!
-오늘은 정말 좋은 날이었어요.
-아침에 일어나서 창밖을 보니
-햇살이 너무 따뜻했습니다.`;
-
-      setExtractedText(mockText);
-      setImageUrl('https://storage.googleapis.com/mock-bucket/image.jpg');
-      setFilename('uploaded-image-123.jpg');
+      setExtractedText(res.data.text);
+      setImageUrl(res.data.imageUrl);
+      setFilename(res.data.filename);
       setStatus('success');
+
       toast.success('텍스트 추출이 완료되었습니다!');
     } catch (error: any) {
       setStatus('error');
-      if (error.status === 403) {
+      if (error.response?.status === 403) {
         setErrorMessage('오늘은 이미 사용했습니다. 자정 이후 다시 시도해 주세요.');
-      } else if (error.status === 415) {
+      } else if (error.response?.status === 415) {
         setErrorMessage('지원하지 않는 파일 형식입니다.');
       } else {
         setErrorMessage('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
@@ -208,35 +177,9 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
     }
   };
 
-  const handleAddKeyword = () => {
-    if (!newKeyword.trim()) {
-      toast.error('키워드를 입력해주세요.');
-      return;
-    }
-    if (keywords.includes(newKeyword.trim())) {
-      toast.error('이미 추가된 키워드입니다.');
-      return;
-    }
-    if (keywords.length >= 5) {
-      toast.error('키워드는 최대 5개까지만 추가할 수 있습니다.');
-      return;
-    }
-    setKeywords([...keywords, newKeyword.trim()]);
-    setNewKeyword('');
-  };
-
-  const handleRemoveKeyword = (keyword: string) => {
-    setKeywords(keywords.filter(k => k !== keyword));
-  };
-
   const handleSaveAsDiary = async () => {
     if (!extractedText.trim()) {
       toast.error('추출된 텍스트가 없습니다.');
-      return;
-    }
-
-    if (!selectedYear || !selectedMonth || !selectedDay) {
-      toast.error('날짜를 선택해주세요.');
       return;
     }
 
@@ -244,40 +187,45 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
 
     try {
       const saveData: OCRSaveData = {
-        userId: 'mock-user-id',
+        userId: Number(localStorage.getItem("user_id")),
         content: extractedText,
         imageUrl: imageUrl,
-        date: `${selectedYear}-${selectedMonth.padStart(2, '0')}-${selectedDay.padStart(2, '0')}`,
-        keywordIds: keywords.map((_, idx) => idx),
+        date: selectedDate,
+        keywordIds: realKeywordIds,
         emotionType: selectedEmotion !== 'none' ? selectedEmotion : undefined,
         template: selectedTemplate,
         canvasImage: canvasImageData
       };
-
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const res = await api.post("/api/ocr/results", saveData);
+      const diary = res.data;
       
       toast.success('저장했어요. 감정 분석을 시작합니다.');
-      
+
       if (onSave) {
-        onSave(saveData);
+        onSave({
+          userId: Number(localStorage.getItem("user_id")),
+          content: diary.content,
+          imageUrl,
+          date: selectedDate,
+          keywordIds: realKeywordIds,
+          emotionType: selectedEmotion !== "none" ? selectedEmotion : undefined,
+        });
       }
 
       // 감정 분석 화면으로 이동
       if (onStartAnalysis) {
-        onStartAnalysis();
-      } else {
-        onBack();
+        onStartAnalysis({
+          diaryId: res.data.id,
+          date: selectedDate,
+          keywordIds: realKeywordIds,
+          content: diary.content,
+        });
       }
     } catch (error) {
       setStatus('error');
       setErrorMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
       setShowErrorDialog(true);
     }
-  };
-
-  const handleSuccessConfirm = () => {
-    setShowSuccessDialog(false);
-    onBack();
   };
 
   return (
@@ -357,33 +305,38 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis }: OCRPreviewProps)
             <CardContent className="p-4">
               <HandwritingCanvas
                 template={selectedTemplate}
-                onSave={async (blob, imageData) => {
-                  setCanvasImageData(imageData);
-                  const file = new File([blob], `handwriting-${Date.now()}.png`, { type: 'image/png' });
+                onSave={async (file) => {
                   setSelectedFile(file);
-                  setPreviewUrl(URL.createObjectURL(blob));
-                  
-                  toast.success('손글씨가 저장되었습니다. OCR을 진행합니다.');
-                  
-                  // 자동으로 OCR 처리 시작
-                  setStatus('uploading');
+                  setPreviewUrl(URL.createObjectURL(file));
+                  setStatus("uploading");
                   
                   try {
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    const mockText = `오늘 하루는 정말 좋은 날이었어요.
-아침에 일어나서 창밖을 보니
-햇살이 너무 따뜻했습니다.
-친구들과 만나서 즐거운 시간을 보냈어요.`;
+                    const formData = new FormData();
+                    formData.append("file", file);
+                    formData.append("user_id", localStorage.getItem("user_id") || "");
 
-                    setExtractedText(mockText);
-                    setImageUrl('https://storage.googleapis.com/mock-bucket/image.jpg');
-                    setFilename('handwriting-image.jpg');
-                    setStatus('success');
-                    toast.success('텍스트 추출이 완료되었습니다!');
+                    const res = await api.post("/api/ocr/upload", formData, {
+                      headers: { "Content-Type": "multipart/form-data" },
+                    });
+
+                    setExtractedText(res.data.text);
+                    setImageUrl(res.data.imageUrl);
+                    setFilename(res.data.filename);
+                    setStatus("success");
+
+                    toast.success("텍스트 추출이 완료되었습니다!");
+
                   } catch (error: any) {
-                    setStatus('error');
-                    setErrorMessage('지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.');
+                    setStatus("error");
+
+                    if (error.response?.status === 403) {
+                      setErrorMessage("오늘 OCR 사용 횟수를 모두 소진했습니다. 자정 이후 다시 시도해 주세요.");
+                    } else if (error.response?.status === 415) {
+                      setErrorMessage("지원하지 않는 파일 형식입니다.");
+                    } else {
+                      setErrorMessage("지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.");
+                    }
+
                     setShowErrorDialog(true);
                   }
                 }}

@@ -1,3 +1,5 @@
+import React, { useEffect, useState } from 'react';
+import api from '../../services/api';
 import { motion } from 'motion/react';
 import { Music2 } from 'lucide-react';
 import { Card } from '../ui/card';
@@ -13,6 +15,17 @@ interface MusicCardProps {
 
 export function MusicCard({ music, emotion, detailView = false }: MusicCardProps) {
   const style = emotionStyles[emotion] || emotionStyles['기쁨']; // Fallback to default
+  const [lpToday, setLpToday] = useState(null);
+
+  useEffect(() => {
+    api.get("/api/lp/today")
+      .then(res => {
+        console.log("🎵 /api/lp/today 응답:", res.data);
+        console.log("👉 API raw response:", res);
+        setLpToday(res.data);
+      })
+      .catch(err => console.error(err));
+  }, []);
 
   return (
     <motion.div
@@ -34,24 +47,6 @@ export function MusicCard({ music, emotion, detailView = false }: MusicCardProps
           </div>
         </div>
 
-        {/* Album Cover - only show in analysis result view */}
-        {!detailView && (
-          <div className="flex justify-center px-6 py-4">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="w-48 h-48 rounded-xl shadow-lg overflow-hidden"
-            >
-              <ImageWithFallback
-                src="https://images.unsplash.com/photo-1629923759854-156b88c433aa?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400"
-                alt={`${music.title} album cover`}
-                className="w-full h-full object-cover"
-              />
-            </motion.div>
-          </div>
-        )}
-
         {/* Music Info */}
         <div className={detailView ? "px-6 pt-6 pb-6" : "px-6 pb-6"}>
           <h4 className="mb-1" style={{ color: style.accentColor }}>
@@ -64,13 +59,13 @@ export function MusicCard({ music, emotion, detailView = false }: MusicCardProps
             {music.genre}
           </p>
 
-          {/* Reason */}
+          {/* Reason
           <div className="bg-secondary rounded-xl p-4">
             <p className="text-sm mb-1" style={{ color: '#7B8B4F' }}>추천 이유</p>
             <p className="text-sm">
               {music.reason}
             </p>
-          </div>
+          </div> */}
         </div>
       </Card>
     </motion.div>
