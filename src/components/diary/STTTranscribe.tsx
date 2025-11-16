@@ -21,7 +21,6 @@ interface STTTranscribeProps {
   onBack: () => void;
   onSave?: (data: STTSaveData) => void;
 
-  // ✔ 분석 시작 요청은 분석 요청 객체를 받음
   onStartAnalysis?: (analysisRequest: {
     diaryId: number;
     genreIds: number[];
@@ -49,6 +48,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [transcribedText, setTranscribedText] = useState<string>('');
   const [doVad, setDoVad] = useState(true);
+  const [contentTooShort, setContentTooShort] = useState(false);
   
   // 녹음 관련 상태
   const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>('idle');
@@ -375,11 +375,14 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
     console.log("💛 selectedEmotion =", selectedEmotion);
     console.log("🔊 sttId =", sttId);
 
+    const userId = localStorage.getItem("user_id");
+
     console.log("📦 최종적으로 DiaryEntry로 전달될 onSave payload:", {
       content: transcribedText,
       date: selectedDate,
       keywordIds: realKeywordIds,
-      emotionType: selectedEmotion !== "none" ? selectedEmotion : null
+      emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
+      userId: Number(userId),
     });
     
     if (!sttId) {
@@ -394,69 +397,44 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
     }
 
     if (transcribedText.trim().length < 10) {
-      toast.error('일기 내용이 너무 짧습니다. 최소 10자 이상 작성해주세요.');
+      console.error('일기 내용이 너무 짧습니다. 최소 10자 이상 작성해주세요.');
+      setContentTooShort(true);
       return;
     }
+    setContentTooShort(false);
 
     setStatus('saving');
 
     try {
       const token = localStorage.getItem("accessToken");
-      const userId = localStorage.getItem("user_id");
 
       if (!token || !userId) {
         toast.error("로그인 정보가 없습니다.");
         return;
       }
-
-      console.log("📤 [DEBUG] PUT /api/stt/results/", sttId, transcribedText);
-
-      await api.put(
-        `/api/stt/results/${sttId}`,
-        {
-          userId: Number(userId),
-          text: transcribedText
-        },
-        { headers: { Authorization: `Bearer ${token}` }}
-      );
-
-      console.log("🟢 [DEBUG] STT 결과 업데이트 성공");
-
-      const finalPayload = {
-        content: transcribedText,
-        date: selectedDate,
-        keywordIds: realKeywordIds,
-        emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
-      };
-
-      console.log("📤 [DEBUG] POST /api/diaries/stt payload:", finalPayload);
-
-      const diaryRes = await api.post(
-        "/api/diaries/stt",
-        finalPayload,
-        { headers: { Authorization: `Bearer ${token}` }}
-      );
-
-      const diaryId = diaryRes.data.id;
-
-      toast.success("저장 완료! 감정 분석을 시작합니다.");
       
-      if (onSave) onSave({
-        content: transcribedText,
-        date: selectedDate,
-        keywordIds: realKeywordIds,
-        emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
-      });
+      if (onSave) {
+        onSave({
+          content: transcribedText,
+          date: selectedDate,
+          keywordIds: realKeywordIds,
+          emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
+          sttId: sttId // 이건 부모가 쓸 수 있게 전달만
+        });
+      };
+      
+      toast.success("저장 완료! 감정 분석을 시작합니다.");
+      console.log("저장 완료! 감정 분석을 시작합니다.")
 
       // 감정 분석 화면으로 이동
       if (onStartAnalysis) {
         onStartAnalysis({
           diaryId,
-          date: selectedDate,
-          keywordIds: realKeywordIds,
-          content: transcribedText,
+          genreIds: [],
+          text: transcribedText
         });
       }
+      setStatus("success");
     } catch (error) {
       console.error("❌ 저장 실패:", error);
       toast.error("저장 중 문제가 발생했습니다.");
@@ -814,6 +792,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
                   {transcribedText.length}자
                 </span>
               </div>
+
               <Textarea
                 value={transcribedText}
                 onChange={(e) => setTranscribedText(e.target.value)}
@@ -822,6 +801,13 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
               />
             </CardContent>
           </Card>
+
+          {/* 🔥 여기에 위치해야 화면에 바로 보인다 */}
+          {contentTooShort && (
+            <p className="text-red-500 text-sm mb-3 text-center">
+              일기 내용이 너무 짧아요. 최소 10자 이상 입력해주세요.
+            </p>
+          )}
 
           {/* 하단 버튼 */}
           <div className="flex gap-3 mb-3">

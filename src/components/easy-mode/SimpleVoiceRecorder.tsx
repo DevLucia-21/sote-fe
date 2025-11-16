@@ -1,60 +1,38 @@
 import React, { useState, useRef } from "react";
 import { Button } from "../ui/button";
-import {
-  Mic,
-  Square,
-  Play,
-  Trash2,
-  Loader2,
-} from "lucide-react";
+import { Mic, Square, Play, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import api from "../../services/api";
 
 type RecordingStatus = "idle" | "recording" | "stopped";
 
 interface SimpleVoiceRecorderProps {
   onTranscriptComplete: (text: string) => void;
+  onError?: (err: any) => void;
 }
 
-export function SimpleVoiceRecorder({
-  onTranscriptComplete,
-}: SimpleVoiceRecorderProps) {
+export function SimpleVoiceRecorder({ onTranscriptComplete, onError }: SimpleVoiceRecorderProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [recordingStatus, setRecordingStatus] =
-    useState<RecordingStatus>("idle");
+  const [recordingStatus, setRecordingStatus] = useState<RecordingStatus>("idle");
   const [recordingTime, setRecordingTime] = useState(0);
-  const [recordedAudio, setRecordedAudio] =
-    useState<Blob | null>(null);
-  const [recordedUrl, setRecordedUrl] = useState<string | null>(
-    null,
-  );
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(
-    null,
-  );
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
-
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       const audioChunks: BlobPart[] = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-      };
+      mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks, {
-          type: "audio/webm",
-        });
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
         setRecordedAudio(audioBlob);
-        const url = URL.createObjectURL(audioBlob);
-        setRecordedUrl(url);
-
+        setRecordedUrl(URL.createObjectURL(audioBlob));
         stream.getTracks().forEach((track) => track.stop());
       };
 
@@ -74,10 +52,7 @@ export function SimpleVoiceRecorder({
   };
 
   const stopRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      recordingStatus === "recording"
-    ) {
+    if (mediaRecorderRef.current && recordingStatus === "recording") {
       mediaRecorderRef.current.stop();
       setRecordingStatus("stopped");
 
@@ -91,10 +66,7 @@ export function SimpleVoiceRecorder({
   };
 
   const playRecording = () => {
-    if (recordedUrl) {
-      const audio = new Audio(recordedUrl);
-      audio.play();
-    }
+    if (recordedUrl) new Audio(recordedUrl).play();
   };
 
   const deleteRecording = () => {
@@ -105,18 +77,53 @@ export function SimpleVoiceRecorder({
     toast.success("녹음이 삭제되었습니다.");
   };
 
+  /** 🎤 STT API 호출 */
   const transcribeAudio = async () => {
     if (!recordedAudio) return;
 
-    setIsTranscribing(true);
+    try {
+      setIsTranscribing(true);
 
-    // Mock 음성 인식 (실제로는 API 호출)
-    setTimeout(() => {
-      const mockTranscript =
-        "오늘은 정말 좋은 하루였다. 친구들과 맛있는 점심을 먹고 카페에서 수다를 떨었다. 날씨도 좋아서 기분이 좋았다.";
-      onTranscriptComplete(mockTranscript);
+      const formData = new FormData();
+      formData.append("file", new File([recordedAudio], `recording-${Date.now()}.webm`, { type: "audio/webm" }));
+      formData.append("user_id", localStorage.getItem("user_id") || "0");
+      formData.append("diary_date", new Date().toISOString().split("T")[0]);
+      formData.append("do_vad", "true");
+
+      const sttRes = await api.post("/ai/stt/transcribe", formData, {
+        baseURL: "http://localhost:8000",
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      console.log("🟢 STT 응답 데이터:", sttRes.data);
+
+      const { text } = sttRes.data;
+
+      if (!text) {
+        toast.error("변환된 텍스트가 없습니다.");
+        setIsTranscribing(false);
+        return;
+      }
+
+      onTranscriptComplete(text);
+      toast.success("음성이 텍스트로 변환되었습니다!");
+
+    } catch (e: any) {
+      console.error("❌ STT 실패:", e);
+
+      if (onError) {
+        onError(e);
+      }
+
+      if (e?.response?.status === 429) {
+        toast.error("오늘의 음성 분석 한도를 초과했습니다.");
+      } else {
+        toast.error("음성 변환 중 오류가 발생했습니다.");
+      }
+
+    } finally {
       setIsTranscribing(false);
-    }, 2000);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -135,16 +142,13 @@ export function SimpleVoiceRecorder({
             className="w-48 h-48 rounded-full flex items-center justify-center"
             style={{ backgroundColor: "#7B8B4F" }}
           >
-            <Mic className="w-60 h-60" style={{ transform: "scale(5)", transformOrigin: "center" }} />
+            <Mic className="w-60 h-60" style={{ transform: "scale(5)" }} />
           </Button>
         )}
 
         {recordingStatus === "recording" && (
           <>
-            <div
-              className="text-4xl font-mono"
-              style={{ color: "#E74C3C" }}
-            >
+            <div className="text-4xl font-mono" style={{ color: "#E74C3C" }}>
               {formatTime(recordingTime)}
             </div>
             <Button
@@ -152,47 +156,31 @@ export function SimpleVoiceRecorder({
               className="w-48 h-48 rounded-full flex items-center justify-center"
               style={{ backgroundColor: "#E74C3C" }}
             >
-              <Square className="w-16 h-16" style={{ transform: "scale(3)", transformOrigin: "center" }} />
+              <Square className="w-16 h-16" style={{ transform: "scale(3)" }} />
             </Button>
             <div className="flex items-center gap-3 animate-pulse">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: "#E74C3C" }}
-              ></div>
-              <span
-                className="text-2xl"
-                style={{ color: "#4A3228" }}
-              >
-                녹음 중...
-              </span>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#E74C3C" }}></div>
+              <span className="text-2xl" style={{ color: "#4A3228" }}>녹음 중...</span>
             </div>
           </>
         )}
 
         {recordingStatus === "stopped" && recordedAudio && (
           <>
-            <div
-              className="text-3xl font-mono"
-              style={{ color: "#4A3228" }}
-            >
+            <div className="text-3xl font-mono" style={{ color: "#4A3228" }}>
               {formatTime(recordingTime)}
             </div>
+
             <div className="flex gap-4">
-              <Button
-                onClick={playRecording}
-                className="w-20 h-20 rounded-full"
-                style={{ backgroundColor: "#7B8B4F" }}
-              >
-                <Play className="w-10 h-10" style={{ transform: "scale(2)", transformOrigin: "center" }} />
+              <Button onClick={playRecording} className="w-20 h-20 rounded-full" style={{ backgroundColor: "#7B8B4F" }}>
+                <Play className="w-10 h-10" style={{ transform: "scale(2)" }} />
               </Button>
-              <Button
-                onClick={deleteRecording}
-                className="w-20 h-20 rounded-full"
-                style={{ backgroundColor: "#E74C3C" }}
-              >
-                <Trash2 className="w-10 h-10" style={{ transform: "scale(2)", transformOrigin: "center" }} />
+
+              <Button onClick={deleteRecording} className="w-20 h-20 rounded-full" style={{ backgroundColor: "#E74C3C" }}>
+                <Trash2 className="w-10 h-10" style={{ transform: "scale(2)" }} />
               </Button>
             </div>
+
             <Button
               onClick={transcribeAudio}
               disabled={isTranscribing}

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import api from '../../services/api';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
-import { Badge } from '../ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../ui/alert-dialog';
-import { ChevronRight, Pencil, Sun, Moon, Glasses, Bell, Activity, Eye, EyeOff, Watch } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Glasses, Bell, Activity, Eye, EyeOff, Watch } from 'lucide-react';
 import { toast } from 'sonner';
 import { HealthDataView } from '../HealthDataView';
 import { WatchPairingView } from '../settings/WatchPairingView';
@@ -14,209 +14,356 @@ import { characterInfo, type CharacterType } from '../common/characterImages';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 
 type ViewType = 'main' | 'profile' | 'health' | 'watch-pairing';
-
-interface EasySettingsViewProps {
-  onLogout?: () => void;
-}
-
-const mockGenres = [
-  { id: 1, name: '발라드' },
-  { id: 2, name: 'R&B' },
-  { id: 3, name: '재즈' },
-  { id: 4, name: '팝' },
-  { id: 5, name: '록' },
-  { id: 6, name: '클래식' },
-  { id: 7, name: '힙합' },
-  { id: 8, name: '인디' },
-];
-
 type Character = CharacterType;
 
-export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
+export function EasySettingsView({ onLogout }) {
   const [currentView, setCurrentView] = useState<ViewType>('main');
-  const [notifications, setNotifications] = useState({
-    diary: true,
-    challenge: true,
-  });
-  const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
-    if (typeof window === 'undefined') return 'easy';
-    const saved = localStorage.getItem('theme');
-    return (saved === 'dark' || saved === 'easy' || saved === 'light') ? saved : 'easy';
+
+  // ✔ SettingsView와 동일한 데이터 구조
+  const [profileData, setProfileData] = useState({
+    email: '',
+    nickname: '',
+    birthDate: '',
+    character: 'PIANO' as Character,
+    hasProfileImage: false,
+    profileImageUrl: '',
+    genreIds: [] as number[]
   });
 
-  // 워치 연동 상태 확인
+  // ✔ 알림 설정 (UI에는 2개만 표시하지만 내부 구조는 SettingsView 기반)
+  const [notifications, setNotifications] = useState({
+    diary: false,
+    challenge: false,
+  });
+
+  // ✔ 테마 (SettingsView API 구조 그대로)
+  const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved === 'dark' || saved === 'easy' || saved === 'light')
+      ? saved
+      : 'light';
+  });
+
+  // ✔ 장르 목록 (실제 API 사용)
+  const [genres, setGenres] = useState([]);
+
+  // ✔ 프로필 이미지 파일 업로드용 Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+
+  // ----- 워치 연동 상태 -----
   const [isWatchConnected, setIsWatchConnected] = useState(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('watchConnected') === 'true';
   });
 
-  // 워치 연동 상태 변경 감지
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setIsWatchConnected(localStorage.getItem('watchConnected') === 'true');
-      
-      // 워치가 연동되면 자동으로 건강 데이터도 연동
-      if (localStorage.getItem('watchConnected') === 'true') {
-        localStorage.setItem('healthDataConnected', 'true');
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    // custom event도 listen (같은 탭에서의 변경 감지)
-    window.addEventListener('watchConnectionChanged', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('watchConnectionChanged', handleStorageChange);
-    };
-  }, []);
-
-  const [profileData, setProfileData] = useState(() => {
-    const saved = localStorage.getItem('profileData');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return {
-          email: 'soyeon@sote.app',
-          nickname: '소연',
-          character: 'PIANO' as Character,
-          birthDate: '2003-08-15',
-          hasProfileImage: false,
-          profileImageUrl: '',
-          genreIds: [1, 3, 5] as number[]
-        };
-      }
-    }
-    return {
-      email: 'soyeon@sote.app',
-      nickname: '소연',
-      character: 'PIANO' as Character,
-      birthDate: '2003-08-15',
-      hasProfileImage: false,
-      profileImageUrl: '',
-      genreIds: [1, 3, 5] as number[]
-    };
-  });
-
-  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // 비밀번호 변 관련 state
+  // ----- 패스워드 변경 state -----
   const [showPasswordFields, setShowPasswordFields] = useState(false);
   const [passwordData, setPasswordData] = useState({
-    current: '',
-    new: '',
-    confirm: ''
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   });
   const [showCurrentPwd, setShowCurrentPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
 
+  // --------------------------------------------------------
+  // ⭐ 초기 로딩: SettingsView 구조 그대로 가져옴
+  // --------------------------------------------------------
   useEffect(() => {
-    localStorage.setItem('profileData', JSON.stringify(profileData));
-  }, [profileData]);
+    let initialized = false;
 
+    const loadAll = async () => {
+      if (!initialized) {
+        initialized = true;
+
+        const profileRes = await api.get('/api/users/profile');
+        const p = profileRes.data;
+
+        setProfileData(prev => ({
+          ...prev,
+          email: p.email,
+          nickname: p.nickname,
+          birthDate: p.birthDate,
+          character: p.character,
+          hasProfileImage: p.hasProfileImage,
+          profileImageUrl: p.profileImageUrl ? p.profileImageUrl : prev.profileImageUrl,
+          genreIds: p.musicPreferenceIds || [],
+        }));
+
+        // 🔥 최초 진입시에만 실행
+        if (p.hasProfileImage) {
+          await fetchProfileImage();
+        }
+
+        try {
+          const genreRes = await api.get('/api/genres');
+          setGenres(genreRes.data);
+        } catch (err) {
+          console.error("장르 목록 불러오기 오류:", err);
+        }
+      }
+    };
+
+    loadAll();
+  }, []);
   useEffect(() => {
-    localStorage.setItem('theme', theme);
+    const root = document.documentElement;
+
+    root.classList.remove('dark', 'easy');
+
     if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
+      root.classList.add('dark');
+    } else if (theme === 'easy') {
+      root.classList.add('easy');
+      root.style.setProperty('--font-size', '18px');
     } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.classList.add('light');
+      root.style.setProperty('--font-size', '16px');
     }
-    // 커스텀 이벤트 발생시켜 다른 컴포넌트에 테마 변경 알림
-    window.dispatchEvent(new Event('themeChange'));
+
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const handleSaveProfile = () => {
-    toast.success('프로필이 저장되었습니다.');
-    setCurrentView('main');
+  // --------------------------------------------------------
+  // ⭐ 프로필 이미지 불러오기 (SettingsView 그대로)
+  // --------------------------------------------------------
+  const fetchProfileImage = async () => {
+    try {
+      const res = await api.get("/api/users/profile/image", {
+        responseType: "arraybuffer",
+      });
+
+      const base64 = btoa(
+        new Uint8Array(res.data).reduce(
+          (acc, byte) => acc + String.fromCharCode(byte),
+          ""
+        )
+      );
+
+      const contentType = res.headers["content-type"];
+      const finalUrl = `data:${contentType};base64,${base64}`;
+
+      setProfileData(prev => ({
+        ...prev,
+        profileImageUrl: finalUrl,
+        hasProfileImage: true,
+      }));
+    } catch (err) {
+      console.error("프로필 이미지 조회 실패:", err);
+    }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // --------------------------------------------------------
+  // ⭐ 프로필 이미지 업로드 (SettingsView 방식 그대로)
+  // --------------------------------------------------------
+  const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('파일 크기는 5MB 이하여야 합니다.');
-        return;
-      }
-      setProfileImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileData({ 
-          ...profileData, 
-          hasProfileImage: true,
-          profileImageUrl: reader.result as string 
-        });
+    if (!file) return;
+
+    // 1) 로컬 즉시 표시
+    const localUrl = URL.createObjectURL(file);
+    setProfileData(prev => ({
+      ...prev,
+      hasProfileImage: true,
+      profileImageUrl: localUrl,
+    }));
+
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+
+      // 2) 서버 업로드
+      const res = await api.post("/api/users/profile/image", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // 🚨 res.data = 문자열 하나임.
+      const finalUrl = res.data;
+
+      // 3) 서버 실제 URL로 덮어쓰기
+      console.log("🧩 setProfileData 호출 위치", {
+        reason: "초기 로딩",
+        incoming: { ...res, profileImageUrl }
+      });
+      setProfileData(prev => ({
+        ...prev,
+        hasProfileImage: true,
+        profileImageUrl: finalUrl,
+      }));
+
+      toast.success("프로필 사진이 변경되었습니다.");
+    } catch (err) {
+      console.error(err);
+      toast.error("이미지 업로드 중 오류 발생");
+    }
+  };
+
+  // --------------------------------------------------------
+  // ⭐ 프로필 저장 (SettingsView 패턴 동일)
+  // --------------------------------------------------------
+  const handleSaveProfile = async () => {
+    try {
+      // 1) 프로필 정보 저장
+      const req = {
+        nickname: profileData.nickname,
+        character: profileData.character,
+        genreIds: profileData.genreIds,
       };
-      reader.readAsDataURL(file);
-      toast.success('프로필 사진이 변경되었습니다.');
+
+      await api.put("/api/users/profile", req);
+
+      toast.success("프로필이 저장되었습니다.");
+      setCurrentView("main");
+    } catch (err) {
+      console.error(err);
+      toast.error("프로필 저장 중 오류가 발생했습니다.");
     }
   };
 
-  const handlePasswordChange = () => {
-    if (!passwordData.current || !passwordData.new || !passwordData.confirm) {
-      toast.error('모든 필드를 입력해주세요.');
+  // --------------------------------------------------------
+  // ⭐ 비밀번호 변경 (SettingsView 동일)
+  // --------------------------------------------------------
+  const handlePasswordChange = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error("모든 필드를 입력해주세요.");
       return;
     }
 
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(passwordData.new);
-    if (passwordData.new.length < 8 || !hasSpecial) {
-      toast.error('새 비밀번호는 8자 이상, 특수문자 1개 이상 포함해야 합니다.');
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error("새 비밀번호가 일치하지 않습니다.");
       return;
     }
 
-    if (passwordData.new !== passwordData.confirm) {
-      toast.error('새 비밀번호가 일치하지 않습니다.');
-      return;
-    }
+    try {
+      await api.put("/api/users/password", {
+        oldPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
 
-    toast.success('비밀번호가 변경되었습니다.');
-    setPasswordData({ current: '', new: '', confirm: '' });
-    setShowPasswordFields(false);
+      console.log("비밀번호 변경")
+      toast.success("비밀번호가 변경되었습니다.");
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      console.error(err);
+      toast.error("현재 비밀번호가 틀립니다.");
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    toast.success('로그아웃되었습니다.');
-    if (onLogout) onLogout();
+  // --------------------------------------------------------
+  // ⭐ 알림 설정 저장 (SettingsView API 완전 동일)
+  // --------------------------------------------------------
+  const updateNotification = async (key: "diary" | "challenge", checked: boolean) => {
+    try {
+      // 먼저 상태 미리 반영
+      const newState = {
+        ...notifications,
+        [key]: checked,
+      };
+      setNotifications(newState);
+
+      // 정확한 enabledNotifications 구성
+      const enabledList = [];
+      if (newState.diary) enabledList.push("DIARY");
+      if (newState.challenge) enabledList.push("CHALLENGE");
+
+      // 서버 저장
+      await api.patch("/api/settings/notifications", {
+        enabledNotifications: enabledList,
+      });
+
+      toast.success("알림 설정이 변경되었습니다.");
+    } catch (err) {
+      console.error("알림 설정 실패:", err);
+      toast.error("알림 설정 중 오류 발생");
+    }
   };
 
-  // 건강 데이터 화면
-  if (currentView === 'health') {
-    return <HealthDataView onBack={() => setCurrentView('main')} />;
+  // --------------------------------------------------------
+  // ⭐ 테마 저장 (SettingsView와 동일)
+  // --------------------------------------------------------
+  const updateTheme = async (mode: "light" | "dark" | "easy") => {
+    try {
+      // 1) React state 업데이트
+      setTheme(mode);
+
+      // 2) 서버 반영
+      await api.patch("/api/settings/theme", { themeMode: mode });
+
+      // 3) localStorage 저장
+      localStorage.setItem("theme", mode);
+
+      // 4) HTML 클래스 정리
+      const root = document.documentElement;
+
+      root.classList.remove("light", "dark", "easy");
+
+      root.classList.add(mode);
+
+      toast.success("화면 모드가 변경되었습니다.");
+    } catch (err) {
+      console.error("테마 변경 실패:", err);
+      toast.error("화면 모드 변경 중 오류 발생");
+    }
+  };
+
+  // --------------------------------------------------------
+  // ⭐ 장르 선택 토글 (SettingsView 구조 그대로)
+  // --------------------------------------------------------
+  const toggleGenre = (id: number) => {
+    setProfileData(prev => {
+      const exists = prev.genreIds.includes(id);
+      return {
+        ...prev,
+        genreIds: exists
+          ? prev.genreIds.filter(g => g !== id)
+          : [...prev.genreIds, id],
+      };
+    });
+  };
+
+    // --------------------------------------------------------
+  // ⭐ 건강 데이터 화면
+  // --------------------------------------------------------
+  if (currentView === "health") {
+    return <HealthDataView onBack={() => setCurrentView("main")} />;
   }
 
-  // 프로필 편집 화면
-  if (currentView === 'profile') {
+  // --------------------------------------------------------
+  // ⭐ 프로필 편집 화면
+  // --------------------------------------------------------
+  if (currentView === "profile") {
     return (
-      <div className="p-6 space-y-6 min-h-screen" style={{ backgroundColor: '#F5F1E8' }}>
+      <div className="p-6 space-y-6 min-h-screen bg-background text-foreground">
         <Button
-          onClick={() => setCurrentView('main')}
+          onClick={() => setCurrentView("main")}
           className="text-xl py-6 px-8"
-          style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+          style={{ backgroundColor: "#7B8B4F", color: "white" }}
         >
           ← 뒤로 가기
         </Button>
 
-        <h1 className="text-4xl" style={{ color: '#4A3228' }}>
+        <h1 className="text-4xl" style={{ color: "#4A3228" }}>
           프로필 편집
         </h1>
 
-        <Card className="p-8 space-y-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
+        <Card className="p-8 space-y-6" style={{ backgroundColor: "white", borderColor: "#E5E5E5" }}>
           {/* 프로필 사진 */}
           <div className="text-center">
-            <p className="text-2xl mb-4" style={{ color: '#4A3228' }}>프로필 사진</p>
+            <p className="text-2xl mb-4" style={{ color: "#4A3228" }}>
+              프로필 사진
+            </p>
             <div className="flex flex-col items-center gap-4">
-              <Avatar className="w-32 h-32 border-4" style={{ borderColor: '#7B8B4F' }}>
-                <AvatarImage src={profileData.profileImageUrl} />
-                <AvatarFallback className="text-3xl" style={{ backgroundColor: '#7B8B4F', color: 'white' }}>
-                  {profileData.nickname?.charAt(0) || 'U'}
+              <Avatar className="w-32 h-32 border-4" style={{ borderColor: "#7B8B4F" }}>
+                <AvatarImage src={profileData.profileImageUrl || undefined} />
+                <AvatarFallback
+                  className="text-3xl"
+                  style={{ backgroundColor: "#7B8B4F", color: "white" }}
+                >
+                  {profileData.nickname?.charAt(0) || "U"}
                 </AvatarFallback>
               </Avatar>
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -224,10 +371,11 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
                 onChange={handleImageChange}
                 className="hidden"
               />
+
               <Button
                 onClick={() => fileInputRef.current?.click()}
                 className="text-xl py-4 px-8"
-                style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+                style={{ backgroundColor: "#7B8B4F", color: "white" }}
               >
                 사진 변경하기
               </Button>
@@ -236,12 +384,14 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
 
           {/* 이메일 (읽기 전용) */}
           <div>
-            <p className="text-2xl mb-3" style={{ color: '#4A3228' }}>이메일</p>
+            <p className="text-2xl mb-3" style={{ color: "#4A3228" }}>
+              이메일
+            </p>
             <Input
-              value={profileData.email}
+              value={profileData.email || ''}
               disabled
               className="text-xl p-6 bg-gray-100"
-              style={{ borderColor: '#E5E5E5', color: '#999' }}
+              style={{ borderColor: "#E5E5E5", color: "#999" }}
             />
             <p className="text-lg text-gray-500 mt-2">이메일은 변경할 수 없습니다</p>
           </div>
@@ -249,97 +399,118 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
           {/* 비밀번호 변경 */}
           <div>
             <div className="flex items-center gap-4 mb-3">
-              <p className="text-lg flex-1" style={{ color: '#4A3228' }}>비밀번호 변경</p>
+              <p className="text-lg flex-1" style={{ color: "#4A3228" }}>
+                비밀번호 변경
+              </p>
               <Button
                 onClick={() => {
                   setShowPasswordFields(!showPasswordFields);
                   if (showPasswordFields) {
-                    setPasswordData({ current: '', new: '', confirm: '' });
+                    setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
                   }
                 }}
                 className="text-lg py-2 px-4"
-                style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+                style={{ backgroundColor: "#7B8B4F", color: "white" }}
               >
-                {showPasswordFields ? '취소' : '변경하기'}
+                {showPasswordFields ? "취소" : "변경하기"}
               </Button>
             </div>
 
             {showPasswordFields && (
-              <div className="space-y-4 mt-4 p-4 rounded-xl" style={{ backgroundColor: '#F5F1E8' }}>
+              <div className="space-y-4 mt-4 p-4 rounded-xl" style={{ backgroundColor: "#F5F1E8" }}>
+                {/* 현재 비밀번호 */}
                 <div>
-                  <p className="text-base mb-2" style={{ color: '#4A3228' }}>현재 비밀번호</p>
+                  <p className="text-base mb-2" style={{ color: "#4A3228" }}>
+                    현재 비밀번호
+                  </p>
                   <div className="relative">
                     <Input
-                      type={showCurrentPwd ? 'text' : 'password'}
-                      value={passwordData.current}
-                      onChange={(e) => setPasswordData({ ...passwordData, current: e.target.value })}
+                      type={showCurrentPwd ? "text" : "password"}
+                      value={passwordData.currentPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, currentPassword: e.target.value })
+                      }
                       className="text-lg p-4 pr-14"
-                      style={{ borderColor: '#E5E5E5' }}
+                      style={{ borderColor: "#E5E5E5" }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowCurrentPwd(!showCurrentPwd)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
                     >
-                      {showCurrentPwd ? 
-                        <EyeOff className="w-6 h-6" style={{ color: '#4A3228' }} /> : 
-                        <Eye className="w-6 h-6" style={{ color: '#4A3228' }} />
-                      }
+                      {showCurrentPwd ? (
+                        <EyeOff className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      ) : (
+                        <Eye className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      )}
                     </button>
                   </div>
                 </div>
 
+                {/* 새 비밀번호 */}
                 <div>
-                  <p className="text-base mb-2" style={{ color: '#4A3228' }}>새 비밀번호</p>
+                  <p className="text-base mb-2" style={{ color: "#4A3228" }}>
+                    새 비밀번호
+                  </p>
                   <div className="relative">
                     <Input
-                      type={showNewPwd ? 'text' : 'password'}
-                      value={passwordData.new}
-                      onChange={(e) => setPasswordData({ ...passwordData, new: e.target.value })}
+                      type={showNewPwd ? "text" : "password"}
+                      value={passwordData.newPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, newPassword: e.target.value })
+                      }
                       className="text-lg p-4 pr-14"
-                      style={{ borderColor: '#E5E5E5' }}
+                      style={{ borderColor: "#E5E5E5" }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowNewPwd(!showNewPwd)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
                     >
-                      {showNewPwd ? 
-                        <EyeOff className="w-6 h-6" style={{ color: '#4A3228' }} /> : 
-                        <Eye className="w-6 h-6" style={{ color: '#4A3228' }} />
-                      }
+                      {showNewPwd ? (
+                        <EyeOff className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      ) : (
+                        <Eye className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      )}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">8자 이상, 특수문자 1개 이상 포함</p>
                 </div>
 
+                {/* 새 비밀번호 확인 */}
                 <div>
-                  <p className="text-base mb-2" style={{ color: '#4A3228' }}>새 비밀번호 확인</p>
+                  <p className="text-base mb-2" style={{ color: "#4A3228" }}>
+                    새 비밀번호 확인
+                  </p>
                   <div className="relative">
                     <Input
-                      type={showConfirmPwd ? 'text' : 'password'}
-                      value={passwordData.confirm}
-                      onChange={(e) => setPasswordData({ ...passwordData, confirm: e.target.value })}
+                      type={showConfirmPwd ? "text" : "password"}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) =>
+                        setPasswordData({ ...passwordData, confirmPassword: e.target.value })
+                      }
                       className="text-lg p-4 pr-14"
-                      style={{ borderColor: '#E5E5E5' }}
+                      style={{ borderColor: "#E5E5E5" }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowConfirmPwd(!showConfirmPwd)}
                       className="absolute right-3 top-1/2 -translate-y-1/2"
                     >
-                      {showConfirmPwd ? 
-                        <EyeOff className="w-6 h-6" style={{ color: '#4A3228' }} /> : 
-                        <Eye className="w-6 h-6" style={{ color: '#4A3228' }} />
-                      }
+                      {showConfirmPwd ? (
+                        <EyeOff className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      ) : (
+                        <Eye className="w-6 h-6" style={{ color: "#4A3228" }} />
+                      )}
                     </button>
                   </div>
                 </div>
 
+                {/* 저장 버튼 */}
                 <Button
                   onClick={handlePasswordChange}
                   className="w-full text-lg py-4"
-                  style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+                  style={{ backgroundColor: "#7B8B4F", color: "white" }}
                 >
                   비밀번호 변경
                 </Button>
@@ -347,33 +518,41 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
             )}
           </div>
 
-          {/* 생년월일 (읽기 전용) */}
+          {/* 생년월일 */}
           <div>
-            <p className="text-2xl mb-3" style={{ color: '#4A3228' }}>생년월일</p>
+            <p className="text-2xl mb-3" style={{ color: "#4A3228" }}>
+              생년월일
+            </p>
             <Input
               type="date"
-              value={profileData.birthDate}
+              value={profileData.birthDate || ''}
               disabled
               className="text-xl p-6 bg-gray-100"
-              style={{ borderColor: '#E5E5E5', color: '#999' }}
+              style={{ borderColor: "#E5E5E5", color: "#999" }}
             />
             <p className="text-base text-gray-500 mt-2">생년월일은 변경할 수 없습니다</p>
           </div>
 
           {/* 닉네임 */}
           <div>
-            <p className="text-2xl mb-3" style={{ color: '#4A3228' }}>이름</p>
+            <p className="text-2xl mb-3" style={{ color: "#4A3228" }}>
+              이름
+            </p>
             <Input
-              value={profileData.nickname}
-              onChange={(e) => setProfileData({ ...profileData, nickname: e.target.value })}
+              value={profileData.nickname || ''}
+              onChange={(e) => 
+                setProfileData({ ...profileData, nickname: e.target.value })
+              }
               className="text-xl p-6"
-              style={{ borderColor: '#E5E5E5' }}
+              style={{ borderColor: "#E5E5E5" }}
             />
           </div>
 
-          {/* 선호 악기 */}
+          {/* 악기 선택 */}
           <div>
-            <p className="text-2xl mb-3" style={{ color: '#4A3228' }}>좋아하는 악기</p>
+            <p className="text-2xl mb-3" style={{ color: "#4A3228" }}>
+              좋아하는 악기
+            </p>
             <div className="grid grid-cols-2 gap-3">
               {Object.entries(characterInfo).map(([key, info]) => (
                 <button
@@ -381,13 +560,16 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
                   onClick={() => setProfileData({ ...profileData, character: key as Character })}
                   className="p-6 rounded-xl transition-all text-xl flex flex-col items-center"
                   style={{
-                    backgroundColor: profileData.character === key ? '#7B8B4F' : '#F5F1E8',
-                    color: profileData.character === key ? 'white' : '#4A3228',
-                    border: `2px solid ${profileData.character === key ? '#7B8B4F' : '#E5E5E5'}`,
+                    backgroundColor:
+                      profileData.character === key ? "#7B8B4F" : "#F5F1E8",
+                    color: profileData.character === key ? "white" : "#4A3228",
+                    border: `2px solid ${
+                      profileData.character === key ? "#7B8B4F" : "#E5E5E5"
+                    }`,
                   }}
                 >
-                  <ImageWithFallback 
-                    src={info.image} 
+                  <ImageWithFallback
+                    src={info.image}
                     alt={info.name}
                     className="w-24 h-24 object-contain mb-2"
                   />
@@ -397,32 +579,29 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
             </div>
           </div>
 
-          {/* 선호 음악 장르 */}
+          {/* 장르 선택 */}
           <div>
-            <p className="text-2xl mb-3" style={{ color: '#4A3228' }}>선호하는 음악 장르</p>
-            <div className="grid grid-cols-2 gap-3">
-              {mockGenres.map((genre) => (
+            <p className="text-2xl mb-3" style={{ color: "#4A3228" }}>
+              선호하는 음악 장르
+            </p>
+            <div className="grid grid-cols-2 gap=3">
+              {genres.map((genre: any) => (
                 <button
                   key={genre.id}
-                  onClick={() => {
-                    const isSelected = profileData.genreIds.includes(genre.id);
-                    if (isSelected) {
-                      setProfileData({
-                        ...profileData,
-                        genreIds: profileData.genreIds.filter((id: number) => id !== genre.id)
-                      });
-                    } else {
-                      setProfileData({
-                        ...profileData,
-                        genreIds: [...profileData.genreIds, genre.id]
-                      });
-                    }
-                  }}
+                  onClick={() => toggleGenre(genre.id)}
                   className="p-5 rounded-xl transition-all text-xl"
                   style={{
-                    backgroundColor: profileData.genreIds.includes(genre.id) ? '#7B8B4F' : '#F5F1E8',
-                    color: profileData.genreIds.includes(genre.id) ? 'white' : '#4A3228',
-                    border: `2px solid ${profileData.genreIds.includes(genre.id) ? '#7B8B4F' : '#E5E5E5'}`,
+                    backgroundColor: profileData.genreIds.includes(genre.id)
+                      ? "#7B8B4F"
+                      : "#F5F1E8",
+                    color: profileData.genreIds.includes(genre.id)
+                      ? "white"
+                      : "#4A3228",
+                    border: `2px solid ${
+                      profileData.genreIds.includes(genre.id)
+                        ? "#7B8B4F"
+                        : "#E5E5E5"
+                    }`,
                   }}
                 >
                   {genre.name}
@@ -431,11 +610,11 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
             </div>
           </div>
 
-          {/* 장 버튼 */}
+          {/* 저장 버튼 */}
           <Button
             onClick={handleSaveProfile}
             className="w-full text-2xl py-8"
-            style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+            style={{ backgroundColor: "#7B8B4F", color: "white" }}
           >
             저장하기
           </Button>
@@ -444,131 +623,157 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
     );
   }
 
-  // 워치 연동 화면
-  if (currentView === 'watch-pairing') {
-    return <WatchPairingView onBack={() => setCurrentView('main')} />;
+  // --------------------------------------------------------
+  // ⭐ 워치 연동 화면
+  // --------------------------------------------------------
+  if (currentView === "watch-pairing") {
+    return <WatchPairingView onBack={() => setCurrentView("main")} />;
   }
 
-  // 메인 설정 화면
+  // --------------------------------------------------------
+  // ⭐ 메인 설정 화면
+  // --------------------------------------------------------
   return (
-    <div className="p-6 space-y-6 min-h-screen" style={{ backgroundColor: '#F5F1E8' }}>
-      <h1 className="text-4xl" style={{ color: '#4A3228' }}>
+    <div className="p-6 space-y-6 min-h-screen bg-background text-foreground">
+      <h1 className="text-4xl" style={{ color: "#4A3228" }}>
         설정
       </h1>
 
       {/* 프로필 카드 */}
-      <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
+      <Card className="p-6 bg-card border border-border">
         <button
-          onClick={() => setCurrentView('profile')}
+          onClick={() => setCurrentView("profile")}
           className="w-full flex items-center justify-between"
         >
           <div className="flex items-center gap-4">
-            <Avatar className="w-20 h-20 border-2" style={{ borderColor: '#7B8B4F' }}>
+            <Avatar className="w-20 h-20 border-2" style={{ borderColor: "#7B8B4F" }}>
               <AvatarImage src={profileData.profileImageUrl} />
-              <AvatarFallback className="text-2xl" style={{ backgroundColor: '#7B8B4F', color: 'white' }}>
-                {profileData.nickname?.charAt(0) || 'U'}
+              <AvatarFallback className="text-2xl" style={{ backgroundColor: "#7B8B4F", color: "white" }}>
+                {profileData.nickname?.charAt(0) || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="text-left">
-              <p className="text-2xl mb-1" style={{ color: '#4A3228' }}>
+              <p className="text-2xl mb-1" style={{ color: "#4A3228" }}>
                 {profileData.nickname}
               </p>
-              <p className="text-lg" style={{ color: '#4A3228', opacity: 0.6 }}>
+              <p className="text-lg" style={{ color: "#4A3228", opacity: 0.6 }}>
                 {profileData.email}
               </p>
             </div>
           </div>
-          <ChevronRight className="w-8 h-8" style={{ color: '#4A3228' }} />
+          <ChevronRight className="w-8 h-8" style={{ color: "#4A3228" }} />
         </button>
       </Card>
 
       {/* 화면 모드 */}
-      <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
-        <p className="text-2xl mb-4" style={{ color: '#4A3228' }}>화면 모드</p>
+      <Card className="p-6 bg-card border border-border">
+        <p className="text-2xl mb-4" style={{ color: "#4A3228" }}>
+          화면 모드
+        </p>
         <div className="space-y-3">
+          {/* 라이트 */}
           <button
-            onClick={() => setTheme('light')}
+            onClick={() => {
+              setTheme("light");
+              toast.success("라이트 모드가 적용되었습니다");
+            }}
             className="w-full flex items-center justify-between p-5 rounded-xl"
             style={{
-              backgroundColor: theme === 'light' ? '#7B8B4F20' : 'transparent',
-              border: `2px solid ${theme === 'light' ? '#7B8B4F' : '#E5E5E5'}`,
+              backgroundColor: theme === "light" ? "#7B8B4F20" : "transparent",
+              border: `2px solid ${theme === "light" ? "#7B8B4F" : "#E5E5E5"}`,
             }}
           >
             <div className="flex items-center gap-4">
-              <Sun className="w-8 h-8" style={{ color: '#4A3228' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>밝은 모드</span>
+              <Sun className="w-8 h-8" style={{ color: "#4A3228" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>
+                밝은 모드
+              </span>
             </div>
-            {theme === 'light' && (
-              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: '#7B8B4F' }} />
+            {theme === "light" && (
+              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: "#7B8B4F" }} />
             )}
           </button>
 
+          {/* 다크 */}
           <button
-            onClick={() => setTheme('dark')}
+            onClick={() => {
+              setTheme("dark");
+              toast.success("다크 모드가 적용되었습니다");
+            }}
             className="w-full flex items-center justify-between p-5 rounded-xl"
             style={{
-              backgroundColor: theme === 'dark' ? '#7B8B4F20' : 'transparent',
-              border: `2px solid ${theme === 'dark' ? '#7B8B4F' : '#E5E5E5'}`,
+              backgroundColor: theme === "dark" ? "#7B8B4F20" : "transparent",
+              border: `2px solid ${theme === "dark" ? "#7B8B4F" : "#E5E5E5"}`,
             }}
           >
             <div className="flex items-center gap-4">
-              <Moon className="w-8 h-8" style={{ color: '#4A3228' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>어두운 모드</span>
+              <Moon className="w-8 h-8" style={{ color: "#4A3228" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>
+                어두운 모드
+              </span>
             </div>
-            {theme === 'dark' && (
-              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: '#7B8B4F' }} />
+            {theme === "dark" && (
+              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: "#7B8B4F" }} />
             )}
           </button>
 
+          {/* 이지 */}
           <button
-            onClick={() => setTheme('easy')}
-            className="w-full p-5 rounded-xl flex items-center justify-between"
+            onClick={() => {
+              setTheme("easy");
+              toast.success("이지 모드가 적용되었습니다");
+            }}
+            className="w-full flex items-center justify-between p-5 rounded-xl"
             style={{
-              backgroundColor: theme === 'easy' ? '#F5F1E8' : 'white',
-              border: `2px solid ${theme === 'easy' ? '#7B8B4F' : '#E5E5E5'}`,
+              backgroundColor: theme === "easy" ? "#F5F1E8" : "white",
+              border: `2px solid ${theme === "easy" ? "#7B8B4F" : "#E5E5E5"}`,
             }}
           >
             <div className="flex items-center gap-4">
-              <Glasses className="w-8 h-8" style={{ color: '#4A3228' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>쉬운 사용 모드 (현재)</span>
+              <Glasses className="w-8 h-8" style={{ color: "#4A3228" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>
+                쉬운 사용 모드 (현재)
+              </span>
             </div>
-            {theme === 'easy' && (
-              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: '#7B8B4F' }} />
+
+            {theme === "easy" && (
+              <div className="w-6 h-6 rounded-full" style={{ backgroundColor: "#7B8B4F" }} />
             )}
           </button>
         </div>
       </Card>
 
       {/* 알림 설정 */}
-      <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
-        <p className="text-2xl mb-4" style={{ color: '#4A3228' }}>알림 설정</p>
+      <Card className="p-6 bg-card border border-border">
+        <p className="text-2xl mb-4" style={{ color: "#4A3228" }}>
+          알림 설정
+        </p>
+
         <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: '#F5F1E8' }}>
+          {/* 일기알림 */}
+          <div className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: "#F5F1E8" }}>
             <div className="flex items-center gap-3">
-              <Bell className="w-7 h-7" style={{ color: '#4A3228' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>일기 작성 알림</span>
+              <Bell className="w-7 h-7" style={{ color: "#4A3228" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>일기 작성 알림</span>
             </div>
+
             <Switch
               checked={notifications.diary}
-              onCheckedChange={(checked) => {
-                setNotifications({ ...notifications, diary: checked });
-                toast.success(checked ? '알림이 켜졌습니다' : '알림이 꺼졌습니다');
-              }}
+              onCheckedChange={(checked) => updateNotification("diary", checked)}
               className="scale-150"
             />
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: '#F5F1E8' }}>
+          {/* 감정 분석 알림 */}
+          <div className="flex items-center justify-between p-4 rounded-lg" style={{ backgroundColor: "#F5F1E8" }}>
             <div className="flex items-center gap-3">
-              <Bell className="w-7 h-7" style={{ color: '#4A3228' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>감정 분석 완료 알림</span>
+              <Bell className="w-7 h-7" style={{ color: "#4A3228" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>감정 분석 완료 알림</span>
             </div>
+
             <Switch
               checked={notifications.challenge}
-              onCheckedChange={(checked) => {
-                setNotifications({ ...notifications, challenge: checked });
-                toast.success(checked ? '알림이 켜졌습니다' : '알림이 꺼졌습니다');
-              }}
+              onCheckedChange={(checked) => updateNotification("challenge", checked)}
               className="scale-150"
             />
           </div>
@@ -576,31 +781,31 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
       </Card>
 
       {/* 워치 연동 */}
-      <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
+      <Card className="p-6 bg-card border border-border">
         <button
-          onClick={() => setCurrentView('watch-pairing')}
+          onClick={() => setCurrentView("watch-pairing")}
           className="w-full flex items-center justify-between"
         >
           <div className="flex items-center gap-4">
-            <Watch className="w-8 h-8" style={{ color: '#7B8B4F' }} />
-            <span className="text-xl" style={{ color: '#4A3228' }}>워치 연동</span>
+            <Watch className="w-8 h-8" style={{ color: "#7B8B4F" }} />
+            <span className="text-xl" style={{ color: "#4A3228" }}>워치 연동</span>
           </div>
-          <ChevronRight className="w-8 h-8" style={{ color: '#4A3228' }} />
+          <ChevronRight className="w-8 h-8" style={{ color: "#4A3228" }} />
         </button>
       </Card>
 
-      {/* 건강 데이터 - 워치 연동되었을 때만 표시 */}
+      {/* 건강 데이터 */}
       {isWatchConnected && (
-        <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
+        <Card className="p-6 bg-card border border-border">
           <button
-            onClick={() => setCurrentView('health')}
+            onClick={() => setCurrentView("health")}
             className="w-full flex items-center justify-between"
           >
             <div className="flex items-center gap-4">
-              <Activity className="w-8 h-8" style={{ color: '#7B8B4F' }} />
-              <span className="text-xl" style={{ color: '#4A3228' }}>건강 데이터 연동</span>
+              <Activity className="w-8 h-8" style={{ color: "#7B8B4F" }} />
+              <span className="text-xl" style={{ color: "#4A3228" }}>건강 데이터 연동</span>
             </div>
-            <ChevronRight className="w-8 h-8" style={{ color: '#4A3228' }} />
+            <ChevronRight className="w-8 h-8" style={{ color: "#4A3228" }} />
           </button>
         </Card>
       )}
@@ -610,11 +815,12 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
         <AlertDialogTrigger asChild>
           <Button
             className="w-full text-2xl py-8"
-            style={{ backgroundColor: '#5D3F35', color: 'white' }}
+            style={{ backgroundColor: "#5D3F35", color: "white" }}
           >
             로그아웃
           </Button>
         </AlertDialogTrigger>
+
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-2xl">로그아웃 하시겠습니까?</AlertDialogTitle>
@@ -624,21 +830,20 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="text-xl py-6">취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogout} className="text-xl py-6">
+            <AlertDialogAction onClick={onLogout} className="text-xl py-6">
               로그아웃
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 회원탈퇴 */}
+      {/* 회원 탈퇴 */}
       <div className="flex justify-end">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button className="text-sm text-red-600 underline">
-              회원탈퇴
-            </button>
+            <button className="text-xl text-red-600 underline">회원탈퇴</button>
           </AlertDialogTrigger>
+          
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="text-2xl">정말 탈퇴하시겠습니까?</AlertDialogTitle>
@@ -646,13 +851,14 @@ export function EasySettingsView({ onLogout }: EasySettingsViewProps) {
                 회원 탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다.
               </AlertDialogDescription>
             </AlertDialogHeader>
+
             <AlertDialogFooter>
               <AlertDialogCancel className="text-xl py-6">취소</AlertDialogCancel>
-              <AlertDialogAction 
+              <AlertDialogAction
                 onClick={() => {
-                  toast.success('회원 탈퇴가 완료되었습니다.');
+                  toast.success("회원 탈퇴가 완료되었습니다.");
                   if (onLogout) onLogout();
-                }} 
+                }}
                 className="text-xl py-6 bg-red-600 hover:bg-red-700"
               >
                 탈퇴하기
