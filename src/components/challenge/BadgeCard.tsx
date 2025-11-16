@@ -1,6 +1,7 @@
 import React from 'react';
-import { BadgeWithStatus, EMOTION_COLORS, EMOTION_LABELS } from './types';
-import { Award, Lock } from 'lucide-react';
+import { BadgeWithStatus } from './types';
+import { Lock } from 'lucide-react';
+import { badgeImages } from '../../utils/badgeImages';
 
 interface BadgeCardProps {
   badge: BadgeWithStatus;
@@ -8,7 +9,6 @@ interface BadgeCardProps {
 }
 
 export function BadgeCard({ badge, onClick }: BadgeCardProps) {
-  // 배지 레벨 추출 (I, II, III, 마스터)
   const getBadgeLevel = () => {
     if (badge.name.includes('마스터')) return '마스터';
     if (badge.name.includes('III')) return 'III';
@@ -16,6 +16,9 @@ export function BadgeCard({ badge, onClick }: BadgeCardProps) {
     if (badge.name.includes('I')) return 'I';
     return '입문';
   };
+
+  // 🔥 배지 이름으로 이미지 URL 가져오기
+  const badgeImage = badgeImages[badge.name] ?? badgeImages.default;
 
   return (
     <div
@@ -32,7 +35,7 @@ export function BadgeCard({ badge, onClick }: BadgeCardProps) {
           gap: 'clamp(0.25rem, 1vw, 1rem)',
         }}
       >
-        {/* 잠금 오버레이 */}
+        {/* 🔒 잠금 오버레이 */}
         {!badge.isUnlocked && (
           <div 
             className="absolute inset-0 rounded-lg flex items-center justify-center z-10" 
@@ -61,7 +64,7 @@ export function BadgeCard({ badge, onClick }: BadgeCardProps) {
           </div>
         )}
 
-        {/* 레벨 표시 */}
+        {/* 🔥 레벨 표시 */}
         <div className="flex justify-center w-full flex-shrink-0">
           <span 
             className="rounded inline-block"
@@ -78,31 +81,21 @@ export function BadgeCard({ badge, onClick }: BadgeCardProps) {
           </span>
         </div>
 
-        {/* 중앙: 배지 아이콘 */}
+        {/* ⭐ 중앙: 이미지 넣기 (Award 아이콘 교체 부분) */}
         <div className="flex justify-center items-center flex-shrink-0">
-          <div
-            className="rounded-full flex items-center justify-center"
+          <img
+            src={badgeImage}
+            alt={badge.name}
             style={{
-              backgroundColor: badge.emotionType
-                ? EMOTION_COLORS[badge.emotionType].bg
-                : '#F5F1E8',
               width: 'clamp(2.5rem, 10vw, 9rem)',
               height: 'clamp(2.5rem, 10vw, 9rem)',
+              opacity: badge.isUnlocked ? 1 : 0.4,      // 잠겨있을 때 흐려지게
+              filter: badge.isUnlocked ? 'none' : 'grayscale(60%)', // 잠금일 때 흑백 느낌 추가도 가능
             }}
-          >
-            <Award
-              style={{
-                color: badge.emotionType
-                  ? EMOTION_COLORS[badge.emotionType].text
-                  : '#7B8B4F',
-                width: 'clamp(1.25rem, 5vw, 4.5rem)',
-                height: 'clamp(1.25rem, 5vw, 4.5rem)',
-              }}
-            />
-          </div>
+          />
         </div>
 
-        {/* 하단: 배지 이름 */}
+        {/* 🔥 이름 */}
         <div className="text-center w-full flex-shrink-0" style={{ padding: '0 clamp(0.125rem, 0.3vw, 0.25rem)' }}>
           <p 
             className="leading-tight line-clamp-2 text-foreground"
