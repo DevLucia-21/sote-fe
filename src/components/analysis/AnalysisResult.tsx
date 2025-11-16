@@ -26,6 +26,19 @@ export function AnalysisResult({
   const [characterType, setCharacterType] = useState<CharacterType>('PIANO');
 
   const [showToast, setShowToast] = useState(true);
+
+  useEffect(() => {
+    console.group("🔍 [AnalysisResult Debug]");
+    console.log("📌 result 객체 전체:", result);
+    console.log("📌 날짜:", result.date);
+    console.log("📌 감정:", result.emotion);
+    console.log("📌 신뢰도:", result.confidence);
+    console.log("📌 이유:", result.reason);
+    console.log("📌 설명:", result.description);
+    console.log("📌 음악 추천:", result.music);
+    console.log("📌 챌린지:", result.challenge);
+    console.groupEnd();
+  }, [result]);
   
   // 🔥 프로필에서 캐릭터 가져오기
   useEffect(() => {

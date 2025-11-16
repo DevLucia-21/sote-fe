@@ -2,9 +2,7 @@ import React, { useState, useRef } from 'react';
 import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Textarea } from '../ui/textarea';
@@ -308,7 +306,7 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                 onSave={async (file) => {
                   setSelectedFile(file);
                   setPreviewUrl(URL.createObjectURL(file));
-                  setStatus("uploading");
+                  setStatus('idle');
                   
                   try {
                     const formData = new FormData();

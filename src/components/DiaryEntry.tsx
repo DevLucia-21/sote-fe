@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
@@ -26,7 +25,6 @@ import {
   Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 
 type DiaryType = 'text' | 'voice' | 'handwriting';
 type AnalysisState = 'idle' | 'analyzing' | 'completed';
@@ -44,7 +42,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
   const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
-  const [analysisRequest, setAnalysisRequest] = useState<any>(null);
 
   //해당 날짜의 일기 여부 확인
   const checkDiaryExists = async (year: string, month: string, day: string) => {
@@ -96,7 +93,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   const selectedDateStr = `${selectedYear}-${selectedMonth.padStart(2, "0")}-${selectedDay.padStart(2, "0")}`;
   
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [newKeyword, setNewKeyword] = useState('');
   const [userKeywords, setUserKeywords] = useState([]);
   
   const [todayQuestion, setTodayQuestion] = useState(null);
@@ -214,8 +210,30 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         res = await api.post("/api/diaries", payload);
       } 
       else if (diaryType === "voice") {
-        res = await api.post("/api/diaries/stt", payload);
-      } 
+        // ⚠️ 매개변수는 diary로 받아야 함
+        const payload = {
+          content: diary.content,
+          date: selectedDateStr,
+          keywordIds: diary.keywordIds,
+          emotionType: diary.emotionType,
+          sttId: diary.sttId,
+        };
+
+        // 서버에 STT 기반 일기 저장 요청
+        const res = await api.post("/api/diaries/stt", payload);
+        const savedDiaryId = res.data.id;
+
+        // 분석 요청에 필요한 데이터 저장
+        setPendingAnalysisPayload({
+          diaryId: savedDiaryId,
+          content: diary.content,
+          date: selectedDateStr,
+          keywordIds: diary.keywordIds,
+        });
+
+        setAnalysisState("analyzing");
+        return;
+      }
       else if (diaryType === "handwriting") {
         res = await api.post("/api/diaries/canvas", {
           ...payload,
@@ -261,39 +279,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       onNavigateToChallenge();
       toast.success('챌린지에 도전하셨어요! 🎯');
     }
-  };
-
-  // Mock 분석 결과 생성
-  const generateMockAnalysisResult = (): AnalysisResultType => {
-    const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
-    const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-    
-    const music = musicRecommendations[randomEmotion][0];
-    const challenge = challengeRecommendations[randomEmotion][0];
-    const reason = emotionReasons[randomEmotion][0];
-    const description = emotionDescriptions[randomEmotion];
-
-    // 선택한 날짜가 오늘인지 확인 (문자열 비교)
-    const selectedDateStr = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const isToday = selectedDateStr === todayStr;
-
-    console.log('🎯 선택한 날짜:', selectedDateStr, '오늘:', todayStr, '오늘 일기 여부:', isToday);
-
-    return {
-      id: `analysis-${Date.now()}`,
-      date: new Date(
-        parseInt(selectedYear),
-        parseInt(selectedMonth) - 1,
-        parseInt(selectedDay)
-      ).toISOString(),
-      emotion: randomEmotion,
-      confidence: Math.floor(Math.random() * 20) + 75, // 75-95%
-      reason,
-      description,
-      music,
-      challenge: isToday ? challenge : undefined, // 오늘 일기만 챌린지 제공
-    };
   };
 
   const handleBack = () => {
@@ -364,8 +349,9 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           userKeywords={userKeywords}
           onBack={handleBack}
 
-          onSave={async (data) => {
-            await handleSave(data);
+          onSave={(data) => {
+            console.log("💙 부모 onSave 호출됨:", data);
+            handleSave(data);
           }}
 
           onStartAnalysis={(analysisRequest) => {

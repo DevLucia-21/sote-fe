@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from "../../services/api";
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Textarea } from '../ui/textarea';
@@ -7,52 +8,122 @@ import { toast } from 'sonner';
 import { SimpleVoiceRecorder } from './SimpleVoiceRecorder';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
 import { AnalysisResult } from '../analysis/AnalysisResult';
-import { AnalysisResult as AnalysisResultType, EmotionType } from '../analysis/types';
-import {
-  emotionReasons,
-  emotionDescriptions,
-} from '../analysis/mockData';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 
 type DiaryType = 'text' | 'voice';
-type AnalysisState = 'idle' | 'analyzing' | 'completed';
 
 export function EasyDiaryEntry() {
   const [diaryType, setDiaryType] = useState<DiaryType>('text');
   const [content, setContent] = useState('');
-  const [analysisState, setAnalysisState] = useState<AnalysisState>('idle');
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
+  const [analysisState, setAnalysisState] = useState('idle');
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [lengthWarning, setLengthWarning] = useState(false);
+  const [sttLimitWarning, setSttLimitWarning] = useState(false);
 
-  const handleSubmit = () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    const checkTodayDiary = async () => {
+      try {
+        const res = await api.get('/api/diaries', { params: { date: todayStr } });
+        const todayDiary = res.data;
+
+        if (todayDiary) {
+          setShowWarningModal(true);
+        }
+      } catch (err) {
+        console.error("오늘 일기 조회 실패:", err);
+      }
+    };
+
+    checkTodayDiary();
+  }, [todayStr]);
+
+  const handleSubmit = async () => {
     if (!content.trim()) {
-      toast.error('일기 내용을 입력해주세요.');
+      toast.error("일기 내용을 입력해주세요.");
       return;
     }
 
-    // 분석 시작
-    setAnalysisState('analyzing');
+    if (content.trim().length < 10) {
+      setLengthWarning(true);   // 🔥 경고 표시
+      return;
+    }
+    setLengthWarning(false);
+
+    try {
+      const savePayload = {
+        content: content.trim(),
+        date: todayStr,
+        keywordIds: [],
+        emotionType: null,
+      };
+
+      let res;
+      if (diaryType === "text") {
+        res = await api.post("/api/diaries", savePayload);
+      } else {
+        const token = localStorage.getItem("accessToken");
+        res = await api.post(
+          "/api/diaries/stt",
+          savePayload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      const savedDiary = res.data;
+      
+      // 🔥 DiaryEntry와 동일: 분석 요청을 AnalysisLoading이 담당하게 넘김
+      setPendingAnalysisPayload({
+        diaryId: savedDiary.id,
+        text: savePayload.content,
+        genreIds: [], // Easy 모드에서는 항상 비어 있음
+      });
+
+      setAnalysisState("analyzing");
+      
+    } catch (err: any) {
+      // 🔥 STT 하루 1회 제한(403)
+      if (err?.response?.status === 403 && diaryType === "voice") {
+        setSttLimitWarning(true);
+        return;
+      }
+      toast.error("일기 저장 중 문제가 발생했습니다.");
+      console.error(err);
+    }
   };
 
-  const handleAnalysisComplete = () => {
-    // Mock 분석 결과 생성 (음악/챌린지 제외)
-    const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
-    const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-    
-    const reason = emotionReasons[randomEmotion][0];
-    const description = emotionDescriptions[randomEmotion];
+  if (analysisState === "analyzing") {
+    return (
+      <AnalysisLoading
+        payload={pendingAnalysisPayload}
+        instrument="piano"
+        onRetry={() => setAnalysisState("analyzing")}
+        onComplete={(result) => {
+          setAnalysisResult(result);
+          setAnalysisState("completed");
+        }}
+      />
+    );
+  }
 
-    const result: AnalysisResultType = {
-      id: `analysis-${Date.now()}`,
-      date: new Date().toISOString(),
-      emotion: randomEmotion,
-      confidence: Math.floor(Math.random() * 20) + 75,
-      reason,
-      description,
-      // 음악과 챌린지는 제외
-    };
-
-    setAnalysisResult(result);
-    setAnalysisState('completed');
-  };
+  if (analysisState === "completed" && analysisResult) {
+    return (
+      <AnalysisResult
+        result={analysisResult}
+        instrument="piano"
+        onBack={() => {
+          setAnalysisState("idle");
+          setAnalysisResult(null);
+          setContent("");
+          toast.success("일기가 저장되었습니다!");
+        }}
+        onAcceptChallenge={() => {}}
+      />
+    );
+  }
 
   const handleAnalysisBack = () => {
     setAnalysisState('idle');
@@ -68,17 +139,6 @@ export function EasyDiaryEntry() {
     setAnalysisResult(null);
     setDiaryType('text');
   };
-
-  // 분석 로딩 화면
-  if (analysisState === 'analyzing') {
-    return (
-      <AnalysisLoading
-        instrument="piano"
-        onRetry={() => setAnalysisState('analyzing')}
-        onComplete={handleAnalysisComplete}
-      />
-    );
-  }
 
   // 분석 완료 화면
   if (analysisState === 'completed' && analysisResult) {
@@ -142,8 +202,7 @@ export function EasyDiaryEntry() {
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={`오늘 있었던 일을
-자유롭게 적어보세요...`}
+              placeholder={`오늘 있었던 일을 자유롭게 적어보세요...`}
               className="min-h-[300px] text-xl p-6 resize-none"
               style={{ 
                 backgroundColor: '#F5F1E8',
@@ -161,29 +220,51 @@ export function EasyDiaryEntry() {
             <p className="text-2xl mb-4" style={{ color: '#4A3228' }}>
               마이크 버튼을 눌러<br />말씀해주세요
             </p>
-            <SimpleVoiceRecorder 
+            <SimpleVoiceRecorder
               onTranscriptComplete={(text) => {
                 setContent(text);
                 toast.success('음성이 텍스트로 변환되었습니다.');
+              }}
+              onError={(err) => {
+                if (err?.response?.status === 403) {
+                  setSttLimitWarning(true);
+                }
               }}
             />
             {content && (
               <div className="mt-6">
                 <p className="text-xl mb-3" style={{ color: '#4A3228' }}>
-                  변환된 내용
+                  변환된 내용 (수정 가능)
                 </p>
-                <div 
-                  className="p-6 rounded-lg text-xl leading-relaxed"
-                  style={{ backgroundColor: '#F5F1E8', color: '#4A3228' }}
-                >
-                  {content}
-                </div>
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="변환된 텍스트를 직접 수정할 수 있어요"
+                  className="min-h-[200px] text-xl p-6 resize-none"
+                  style={{
+                    backgroundColor: '#F5F1E8',
+                    borderColor: '#E5E5E5',
+                    color: '#4A3228',
+                    fontSize: '1.25rem',
+                    lineHeight: '1.8'
+                  }}
+                />
               </div>
             )}
           </div>
         )}
       </Card>
-
+      {lengthWarning && (
+        <p className="text-red-600 text-center text-lg font-medium">
+          일기는 10자 이상 작성해야 저장할 수 있어요.
+        </p>
+      )}
+      {sttLimitWarning && (
+        <p className="text-red-600 text-center text-lg font-medium">
+          음성 변환은 하루 1회만 사용할 수 있어요.<br />
+          텍스트 입력을 이용해주세요.
+        </p>
+      )}
       {/* 제출 버튼 */}
       <Button
         onClick={handleSubmit}
@@ -197,6 +278,25 @@ export function EasyDiaryEntry() {
       >
         일기 완성하기
       </Button>
+
+      <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>오늘 일기가 이미 있어요</DialogTitle>
+            <DialogDescription>
+              이미 작성된 일기가 있습니다. 더 작성하실 수 없습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex gap-3">
+            <Button
+              onClick={() => setShowWarningModal(false)}
+            >
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

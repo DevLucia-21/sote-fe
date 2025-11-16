@@ -102,21 +102,39 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  const handleCellClick = async (date: string) => {
+  const handleCellClick = async (dateStr: string) => {
     try {
-      // 백엔드에서 해당 날짜의 상세 일기 가져오기
-      const res = await api.get(`/api/diaries?date=${date}`);
+      const res = await api.get(`/api/diaries?date=${dateStr}`);
 
       if (!res.data) {
-        toast.error("해당 날짜의 일기를 찾을 수 없어요.");
+        toast.error("해당 날짜에 일기가 없어요.");
         return;
       }
 
-      // 이제 id가 포함된 full diary를 상태에 넣는다
-      setSelectedDiary(res.data);
+      const diary = res.data;
 
-    } catch (err) {
-      console.error("❌ 일기 상세 조회 실패:", err);
+      // 📌 CalendarView에서 쓰고 있는 emotion 매핑
+      const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
+        "기쁨": "JOY",
+        "슬픔": "SADNESS",
+        "분노": "ANGER",
+        "무기력": "APATHY",
+        "예민": "SENSITIVE",
+      };
+
+      // 📌 CalendarView와 동일한 형태로 diary 객체 재구성
+      const finalDiary = {
+        ...diary,
+        date: diary.date.split("T")[0],    // "YYYY-MM-DD"만 남기기
+        emotion: emotionMap[diary.emotionLabel] || "APATHY",
+        contentLength: diary.contentLength || diary.content?.length || 0,
+      };
+
+      // 📌 이제 완성된 diary를 넘기니까 DiaryDetailView에서도 정상 작동!
+      setSelectedDiary(finalDiary);
+
+    } catch (e) {
+      console.error("❌ 날짜별 일기 로딩 실패:", e);
       toast.error("일기 데이터를 불러오지 못했습니다.");
     }
   };
