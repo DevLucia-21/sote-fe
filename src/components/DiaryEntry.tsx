@@ -208,8 +208,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: commonKeywords,
-          emotionType: null,
-          writeType: "TEXT"
+          emotionType: diary.emotionType,
         };
         res = await api.post("/api/diaries", payload);
       } 
@@ -220,7 +219,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           keywordIds: diary.keywordIds,
           emotionType: diary.emotionType,
           sttId: diary.sttId,
-          writeType: "VOICE"
         };
 
         res = await api.post("/api/diaries/stt", payload);
@@ -230,8 +228,8 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: commonKeywords,
+          emotionType: diary.emotionType,
           canvasImageBase64: diary.imageBase64 ?? null,
-          writeType: "HANDWRITING"
         };
 
         res = await api.post("/api/diaries/canvas", payload);
