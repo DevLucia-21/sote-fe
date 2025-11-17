@@ -37,11 +37,12 @@ function mapBackendToFrontend(raw: any) {
     description: raw.emotionReason,  // 동일 값 사용
     music: raw.selectedTrackTitle
       ? {
-          genre: raw.selectedTrackGenre,
           title: raw.selectedTrackTitle,
           artist: raw.selectedTrackArtist,
           album: raw.selectedTrackAlbum,
-          range: raw.selectedTrackRange,
+          genre: raw.selectedTrackGenre,
+          reason: raw.selectedTrackReason,
+          coverImageUrl: raw.selectedTrackCoverImageUrl || null,
         }
       : null,
     challenge: raw.challenge || null,
@@ -105,7 +106,7 @@ export function AnalysisLoading({
   
   async function fetchLP() {
     try {
-      const lpRes = await api.get("/lp/today");
+      const lpRes = await api.get("/api/lp/today");
       setLp(lpRes.data);
     } catch (err) {
       console.warn("⚠️ 오늘의 LP 불러오기 실패:", err);
