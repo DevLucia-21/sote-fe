@@ -13,7 +13,6 @@ import {
 } from './ui/dropdown-menu';
 import { MonthlyAnswers } from './questions/MonthlyAnswers';
 import { NoteHead } from './calendar/NoteHead';
-import { notePositions, emotionColors, getStemDirection } from './calendar/noteMapping';
 import { HealthStatsTab } from './statistics/HealthStatsTab';
 import { 
   Music, 
@@ -39,7 +38,6 @@ import {
   Sparkles,
   Trophy
 } from 'lucide-react';
-import { get } from 'http';
 
 // ========== API Response Types ==========
 
@@ -116,6 +114,31 @@ function computeCurrentWeek(baseDate: Date) {
   const week = Math.floor(diff / 7) + 1;
 
   return { year, month, week };
+}
+
+function getIsoWeek(date: Date) {
+  const temp = new Date(date.getTime());
+  temp.setHours(0, 0, 0, 0);
+  temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
+  const week1 = new Date(temp.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((temp.getTime() - week1.getTime()) / 86400000 -
+        3 +
+        ((week1.getDay() + 6) % 7)) /
+        7
+    )
+  );
+}
+
+function computeOffset(baseDate: Date) {
+  const today = new Date();
+
+  const currentWeek = getIsoWeek(baseDate);
+  const thisWeek = getIsoWeek(today);
+
+  return currentWeek - thisWeek;
 }
 
 // ========== Mapping Constants ==========
@@ -224,7 +247,8 @@ export function StatisticsView() {
   });
   
   // 건강 데이터 연동 여부 확인
-  const isHealthConnected = localStorage.getItem('healthDataConnected') === 'true';
+  const isHealthConnected = 'true';
+  // const isHealthConnected = localStorage.getItem('healthDataConnected') === 'true';
 
   const characterToInstrument: Record<string, string> = {
     "PIANO": "piano",
@@ -311,12 +335,13 @@ export function StatisticsView() {
 
   // ========== Fetch Weekly Data ==========
   useEffect(() => {
-    const now = new Date();
-    setCurrentWeek({
-      baseDate: now,
-      ...computeCurrentWeek(now)
-    });
-  }, []);
+    const y = currentWeek.baseDate.getFullYear();
+    const m = currentWeek.baseDate.getMonth() + 1;
+
+    if (currentMonth.year !== y || currentMonth.month !== m) {
+      setCurrentMonth({ year: y, month: m });
+    }
+  }, [currentWeek]);
 
   useEffect(() => {
     const loadContentLengths = async () => {
@@ -343,6 +368,8 @@ export function StatisticsView() {
 
   useEffect(() => {
     const fetchWeeklyData = async () => {
+      console.log("🌙 baseDate =", currentWeek.baseDate);
+      console.log("📅 fetch with year/month =", year, month);
       setIsLoadingWeekly(true);
       try {
         // baseDate에서 year, month 추출
@@ -392,8 +419,13 @@ export function StatisticsView() {
         };
         loadProfile();
 
+        const offset = computeOffset(currentWeek.baseDate);
+
         const challenge = await api.get("/api/statistics/challenges/completion-rate", {
-          params: { period: "weekly" }
+          params: {
+            period: "weekly",
+            offset: offset,
+          }
         });
         setWeeklyChallengeStats(challenge.data);
       } catch (error) {
@@ -411,15 +443,34 @@ export function StatisticsView() {
     const fetchMonthlyData = async () => {
       setIsLoadingMonthly(true);
       try {
-        const diary = await api.get("/api/statistics/diary", { 
-          params: { period: "monthly", month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}` } 
+        const diary = await api.get("/api/statistics/diary", {
+          params: {
+            period: "monthly",
+            year: currentMonth.year,
+            month: currentMonth.month,
+          }
         });
+        console.log("year:", currentMonth.year, "month:", currentMonth.month)
         const challengeEmotion = await api.get("/api/statistics/challenges/emotion-performance", {
-          params: { period: "monthly" }
+          params: {
+            period: "monthly",
+            month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`
+          }
         });
-        const music = await api.get("/api/statistics/music", { params: { period: "monthly" }});
-        const keywordRank = await api.get("/api/statistics/keywords/ranking", { params: { period: "monthly" }});
-
+        const music = await api.get("/api/statistics/music", {
+          params: {
+            period: "monthly",
+            year: currentMonth.year,
+            month: currentMonth.month,
+          }
+        });
+        const keywordRank = await api.get("/api/statistics/keywords/ranking", {
+          params: {
+            period: "monthly",
+            year: currentMonth.year,
+            month: currentMonth.month,
+          }
+        });
         setMonthlyDiaryStats(diary.data);
 
         const ce = challengeEmotion.data;
@@ -435,8 +486,7 @@ export function StatisticsView() {
         const musicRaw = music.data;
         const normalizedMusicStats = {
           monthlyCount: musicRaw.monthlyCount ?? 0,
-          topGenre: musicRaw.topGenre ?? "-",
-          emotionGenreMappings: musicRaw.emotionGenreMapping ?? {}
+          emotionGenreMapping: musicRaw.emotionGenreMapping ?? {}
         };
         setMonthlyMusicStats(normalizedMusicStats);
 
@@ -1081,7 +1131,7 @@ export function StatisticsView() {
                     let topGenre = "-";
                     let topCount = -1;
 
-                    const mappings = monthlyMusicStats.emotionGenreMappings ?? {};
+                    const mappings = monthlyMusicStats.emotionGenreMapping ?? {};
 
                     // 감정별 → 장르별 → 수치 비교
                     Object.values(mappings).forEach((genres) => {
@@ -1113,9 +1163,9 @@ export function StatisticsView() {
                       감정별 추천 상세 내역
                     </p>
 
-                    {monthlyMusicStats.emotionGenreMappings &&
-                    Object.entries(monthlyMusicStats.emotionGenreMappings).length > 0 ? (
-                      Object.entries(monthlyMusicStats.emotionGenreMappings).map(([emotionKo, genres]) => {
+                    {monthlyMusicStats.emotionGenreMapping &&
+                      Object.entries(monthlyMusicStats.emotionGenreMapping).length > 0 ? (
+                      Object.entries(monthlyMusicStats.emotionGenreMapping).map(([emotionKo, genres]) => {
                         const emotion =
                           emotionKo === '기쁨' ? 'JOY' :
                           emotionKo === '슬픔' ? 'SADNESS' :

@@ -84,7 +84,10 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   const [notifications, setNotifications] = useState({
     diary: true,
     challenge: true,
-    emotionDone: false
+    emotionDone: false,
+    musicRecommend: false,
+    weeklyStats: false,
+    reminderCustom: false,
   });
   const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
     const saved = localStorage.getItem('theme');
@@ -98,23 +101,12 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   });
 
   useEffect(() => {
-    async function fetchWatchStatus() {
-      try {
-        const res = await api.get("/api/watch/status");
-        const connected = res.data === true;
+    const connected = localStorage.getItem("watchConnected") === "true";
+    setIsWatchConnected(connected);
 
-        setIsWatchConnected(connected);
-        localStorage.setItem("watchConnected", connected ? "true" : "false");
-
-        if (connected) {
-          localStorage.setItem("healthDataConnected", "true");
-        }
-      } catch (err) {
-        console.error("워치 상태 조회 실패:", err);
-      }
+    if (connected) {
+      localStorage.setItem("healthDataConnected", "true");
     }
-
-    fetchWatchStatus();
   }, []);
 
   // 워치 연동 상태 변경 감지
