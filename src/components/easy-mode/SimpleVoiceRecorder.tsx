@@ -91,7 +91,7 @@ export function SimpleVoiceRecorder({ onTranscriptComplete, onError }: SimpleVoi
       formData.append("do_vad", "true");
 
       const sttRes = await api.post("/ai/stt/transcribe", formData, {
-        baseURL: "http://localhost:8000",
+        baseURL: "https://sote-ai.onrender.com",
         headers: { "Content-Type": "multipart/form-data" },
       });
 

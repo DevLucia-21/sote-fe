@@ -243,7 +243,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         toast.error('마이크 설정이 맞지 않습니다. 다른 마이크를 시도해주세요.');
         setPermissionStatus('denied');
       } else if (error.name === 'SecurityError') {
-        toast.error('보안 문제로 마이크에 접근할 수 없습니다. HTTPS 연결을 사용하거나 localhost에서 실행해주세요.');
+        toast.error('보안 문제로 마이크에 접근할 수 없습니다.');
         setPermissionStatus('denied');
       } else {
         toast.error('마이크 접근 중 오류가 발생했습니다: ' + error.message);
@@ -329,7 +329,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       });
 
       const sttRes = await api.post("/ai/stt/transcribe", formData, {
-        baseURL: "http://localhost:8000",
+        baseURL: "https://sote-ai.onrender.com",
         headers: {
           "Content-Type": "multipart/form-data",
         },
