@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import api from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { 
@@ -67,6 +68,11 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
   const [isWaitingForPair, setIsWaitingForPair] = useState(false);
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false);
   const [codeError, setCodeError] = useState<string>('');
+  const [watchData, setWatchData] = useState({
+  status: '연결됨',
+    lastSync: localStorage.getItem('watchLastSync') || '-',
+    model: localStorage.getItem('watchModel') || '-',
+  });
   
   // 이지모드 감지
   const [isEasyMode] = useState(() => {
@@ -74,13 +80,20 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
     const theme = localStorage.getItem('theme');
     return theme === 'easy';
   });
-  
-  // Mock 워치 데이터
-  const [watchData] = useState({
-    model: 'Galaxy Watch',
-    lastSync: '오늘 08:31',
-    status: '연결됨'
-  });
+
+  const disconnectWatch = async () => {
+    try {
+      await api.post("/api/watch/auth/logout");
+
+      localStorage.setItem("watchConnected", "false");
+      localStorage.setItem("healthDataConnected", "false");
+
+      window.dispatchEvent(new Event("watchConnectionChanged"));
+      toast.success("워치 연동 해제됨");
+    } catch (err) {
+      toast.error("연동 해제 실패");
+    }
+  };
 
   // 페어링 코드 발급 API 호출
   const fetchPairCode = async () => {
@@ -96,7 +109,7 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
     setCodeError('');
     
     try {
-      const response = await watchAuthAPI.createPairCode();
+      const response = await api.post("/api/watch/auth/pair-code");
       
       setPairCode(response.data.code); // pairCode → code
       setExpiresAt(response.data.expiresAt);
@@ -169,24 +182,44 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
         }
       }, 2000); // 2초마다 확인
 
-      // Mock: 10초 후 자동 연결
-      const mockTimer = setTimeout(() => {
-        localStorage.setItem('watchConnected', 'true');
-        localStorage.setItem('watchModel', 'Galaxy Watch');
-        localStorage.setItem('watchLastSync', new Date().toISOString());
-        localStorage.setItem('watchPairCode', pairCode);
-        localStorage.setItem('healthDataConnected', 'true');
-        
-        // 워치 연동 상태 변경 이벤트 발생
-        window.dispatchEvent(new Event('watchConnectionChanged'));
-        
-        setCurrentView('status');
-        toast.success('워치가 성공적으로 연동되었습니다!');
-      }, 10000);
+      // 페어링 상태 폴링
+      useEffect(() => {
+        if (!isWaitingForPair || !pairCode) return;
+
+        const interval = setInterval(async () => {
+          try {
+            const res = await api.post("/api/watch/auth/pair");
+
+            if (res.data.paired) {
+              // 백엔드에서 받은 정보로 업데이트
+              localStorage.setItem("watchConnected", "true");
+              localStorage.setItem("watchModel", res.data.model);
+              localStorage.setItem("watchLastSync", res.data.lastSync);
+
+              setWatchData({
+                status: "연결됨",
+                model: res.data.model,
+                lastSync: res.data.lastSync,
+              });
+
+              toast.success("워치가 성공적으로 연동되었습니다!");
+
+              setIsWaitingForPair(false);
+              setCurrentView("success");
+
+              clearInterval(interval);
+            }
+
+          } catch (err) {
+            console.error("Pair polling error:", err);
+          }
+        }, 2000); // 2초마다 재확인
+
+        return () => clearInterval(interval);
+      }, [isWaitingForPair, pairCode]);
 
       return () => {
         clearInterval(pollInterval);
-        clearTimeout(mockTimer);
       };
     }
   }, [isWaitingForPair, pairCode]);
@@ -218,15 +251,15 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
   };
 
   // 연결 해제
-  const handleDisconnect = () => {
+  const handleDisconnect = async () => {
+    await disconnectWatch();
+
     localStorage.removeItem('watchConnected');
     localStorage.removeItem('watchModel');
     localStorage.removeItem('watchLastSync');
     localStorage.removeItem('watchPairCode');
+
     setShowDisconnectDialog(false);
-    setPairCode('');
-    setExpiresAt('');
-    setCountdown(300);
     setCurrentView('code-display');
     toast.success('워치 연결이 해제되었습니다.');
   };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from "../services/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Switch } from './ui/switch';
@@ -21,7 +22,7 @@ export function HealthDataView({ onBack }: HealthDataViewProps) {
   });
 
   // 워치 연동 시 자동으로 건강 데이터도 연동됨
-  const [isConnected] = useState(true);
+  const [isConnected, setIsConnected] = useState(true);
 
   // 이지모드 감지
   const [isEasyMode] = useState(() => {
@@ -38,29 +39,23 @@ export function HealthDataView({ onBack }: HealthDataViewProps) {
     { key: 'caffeine', icon: Activity, label: '카페인', description: '카페인 섭취량을 기록합니다', color: '#7B3E2E' },
   ];
 
-  const togglePermission = (key: string) => {
+  type PermissionKey = keyof typeof permissions;
+
+  const togglePermission = (key: PermissionKey) => {
     setPermissions(prev => ({
       ...prev,
       [key]: !prev[key]
     }));
-    toast.success('권한이 업데이트되었습니다.');
   };
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setPermissions({
-      steps: false,
-      heartRate: false,
-      sleep: false,
-      water: false,
-      caffeine: false,
-    });
-    toast.success('건강 데이터 연동이 해제되었습니다.');
-  };
-
-  const handleConnect = () => {
-    setIsConnected(true);
-    toast.success('건강 데이터가 연동되었습니다.');
+  const handleConnect = async () => {
+    try {
+      await api.post("/api/watch/health/sync");
+      setIsConnected(true);
+      toast.success("건강 데이터가 연동되었습니다.");
+    } catch (err) {
+      toast.error("건강 데이터 연동에 실패했습니다.");
+    }
   };
 
   const enabledCount = Object.values(permissions).filter(Boolean).length;
