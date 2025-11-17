@@ -208,7 +208,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: commonKeywords,
-          emotionType: diary.emotionType,
+          emotionType: diary.emotionType ?? "APATHY"
         };
         res = await api.post("/api/diaries", payload);
       } 
@@ -217,7 +217,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: diary.keywordIds,
-          emotionType: diary.emotionType,
+          emotionType: diary.emotionType ?? "APATHY"
           sttId: diary.sttId,
         };
 
@@ -228,7 +228,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: commonKeywords,
-          emotionType: diary.emotionType,
+          emotionType: diary.emotionType ?? "APATHY"
           canvasImageBase64: diary.imageBase64 ?? null,
         };
 
