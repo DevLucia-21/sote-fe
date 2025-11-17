@@ -90,23 +90,15 @@ export function WatchStressCard() {
       setError(null);
 
       try {
-        // 오늘 데이터 가져오기
-        // const todayResponse = await fetch('/api/watch/stress/today');
-        // if (!todayResponse.ok) {
-        //   if (todayResponse.status === 401 || todayResponse.status === 404) {
-        //     setIsConnected(false);
-        //     return;
-        //   }
-        //   throw new Error('Failed to fetch today data');
-        // }
-        // const todayJson = await todayResponse.json();
-        
-        // Mock data for today
-        const todayJson: StressTodayResponse = {
-          averageHrv: 72.5,
-          stressLevel: 'LOW',
-          date: new Date().toISOString().split('T')[0]
-        };
+        const todayResponse = await fetch('/api/watch/stress/today');
+        if (!todayResponse.ok) {
+          if (todayResponse.status === 401 || todayResponse.status === 404) {
+            setIsConnected(false);
+            return;
+          }
+          throw new Error('Failed to fetch today data');
+        }
+        const todayJson = await todayResponse.json();
         
         setTodayData(todayJson);
         setIsConnected(true);
@@ -120,29 +112,11 @@ export function WatchStressCard() {
         const fromStr = fromDate.toISOString().split('T')[0];
         const toStr = today.toISOString().split('T')[0];
 
-        // const statsResponse = await fetch(`/api/watch/stress/stats?from=${fromStr}&to=${toStr}`);
-        // if (!statsResponse.ok) throw new Error('Failed to fetch stats');
-        // const statsJson = await statsResponse.json();
+        const statsResponse = await fetch(`/api/watch/stress/stats?from=${fromStr}&to=${toStr}`);
+        if (!statsResponse.ok) throw new Error('Failed to fetch stats');
+        const statsJson = await statsResponse.json();
 
-        // Mock data for stats
-        const mockStats: StressStatsItem[] = [];
-        for (let i = 0; i < daysToFetch; i++) {
-          const date = new Date(fromDate);
-          date.setDate(fromDate.getDate() + i);
-          const dateStr = date.toISOString().split('T')[0];
-          
-          // Generate realistic HRV values with some variation
-          const baseHrv = 60 + Math.random() * 30 - 15; // 45-75 range
-          const hrv = Math.max(30, Math.min(90, baseHrv));
-          
-          mockStats.push({
-            date: dateStr,
-            averageHrv: Number(hrv.toFixed(1)),
-            stressLevel: getStressLevelFromHrv(hrv)
-          });
-        }
-
-        setStatsData(mockStats);
+        setStatsData(statsJson);
 
       } catch (err) {
         console.error('Error fetching watch stress data:', err);
