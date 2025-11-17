@@ -208,6 +208,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: commonKeywords,
+          emotionType: null,
           writeType: "TEXT"
         };
         res = await api.post("/api/diaries", payload);
