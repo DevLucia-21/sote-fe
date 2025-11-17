@@ -67,6 +67,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         // 1) 일기 상세
         const diaryRes = await api.get(`/api/diaries?date=${diary.date}`);
         setDiaryData(diaryRes.data);
+        console.log("일기 상세", diaryRes.data)
 
         // 2) 분석 데이터 가져오기
         const analysisRes = await api.get(`/api/analysis/${diaryRes.data.id}`);
