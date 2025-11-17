@@ -85,18 +85,13 @@ function normalize(dateStr: string) {
 }
 
 function getSunday(date: Date) {
-  // 1) 입력 날짜를 KST로 변환
-  const local = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = local.getDay(); // 0 = Sunday
 
-  // 2) 요일 (0=일요일, 1=월요일...)
-  const day = local.getDay();
-
-  // 3) local 기준 일요일 찾기
   const sunday = new Date(local);
   sunday.setDate(local.getDate() - day);
 
-  // 4) 다시 UTC 시간으로 되돌려 return
-  return new Date(sunday.getTime() - 9 * 60 * 60 * 1000);
+  return sunday; // KST 그대로
 }
 
 function computeCurrentWeek(baseDate: Date) {
@@ -173,11 +168,11 @@ function getWeekDateListByBase(baseDate: Date) {
     const d = new Date(sunday);
     d.setDate(sunday.getDate() + i);
 
-    // 로컬 날짜로 반환 (toISOString 쓰지 말 것!)
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dd}`;
+
+    return `${y}-${m}-${dd}`; // CalendarView와 동일
   });
 }
 
@@ -215,7 +210,6 @@ export function StatisticsView() {
   const [selectedTab, setSelectedTab] = useState<'emotion' | 'health'>('emotion');
   const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'total'>('week');
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showMonthlyAnswers, setShowMonthlyAnswers] = useState(false);
   const isDarkMode =
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark");
@@ -254,6 +248,7 @@ export function StatisticsView() {
     '무기력': 'APATHY',
     '예민': 'SENSITIVE',
   };
+  const [weeklyContentLengths, setWeeklyContentLengths] = useState<Record<string, number>>({});
 
   // 월간
   const [monthlyDiaryStats, setMonthlyDiaryStats] = useState<DiaryStatsResponse | null>(null);
@@ -268,6 +263,7 @@ export function StatisticsView() {
   const [totalEmotionDistribution, setTotalEmotionDistribution] = useState<Record<string, number>>({});
   const [moodRanking, setMoodRanking] = useState<MoodRankingResponse | null>(null);
   const [totalKeywordMapping, setTotalKeywordMapping] = useState<Array<{ keyword: string; emotions: Record<string, number> }>>([]);
+  const [showMonthlyAnswers, setShowMonthlyAnswers] = useState(false);
 
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(false);
   const [isLoadingMonthly, setIsLoadingMonthly] = useState(false);
@@ -321,6 +317,29 @@ export function StatisticsView() {
       ...computeCurrentWeek(now)
     });
   }, []);
+
+  useEffect(() => {
+    const loadContentLengths = async () => {
+      const results: Record<string, number> = {};
+
+      for (const note of weeklyNotes) {
+        const dateStr = normalize(note.date);
+
+        try {
+          const res = await api.get(`/api/diaries?date=${dateStr}`);
+          results[dateStr] = res.data?.content?.length ?? 0;
+        } catch {
+          results[dateStr] = 0;
+        }
+      }
+
+      setWeeklyContentLengths(results);
+    };
+
+    if (weeklyNotes.length > 0) {
+      loadContentLengths();
+    }
+  }, [weeklyNotes]);
 
   useEffect(() => {
     const fetchWeeklyData = async () => {
@@ -838,23 +857,19 @@ export function StatisticsView() {
                     {(() => {
                       const dateList = getWeekDateListByBase(currentWeek.baseDate);
 
-                      const sortedNotes = dateList.map(d =>
-                        weeklyNotes.find(n => normalize(n.date) === d) || null
+                      const sortedNotes = dateList.map((d) =>
+                        weeklyNotes.find((n) => normalize(n.date) === d) || null
                       );
+
                       return sortedNotes.map((noteData, dayIndex) => {
                         if (!noteData) return null;
 
-                        // 날짜 문자열 기반 contentLength 랜덤 고정
                         const dateStr = normalize(noteData.date);
-                        let seed = 0;
-                        for (let i = 0; i < dateStr.length; i++) {
-                          seed = (seed * 31 + dateStr.charCodeAt(i)) % 233280;
-                        }
-                        const randomRatio = seed / 233280;
 
-                        const contentLength = Math.floor(randomRatio * 300) + 1;
+                        // 🔥 map 안에서는 hook 금지 → 미리 계산한 weeklyContentLengths 사용
+                        const realContentLength =
+                          weeklyContentLengths[dateStr] ?? 0;
 
-                        // 위치는 NoteHead 내부에서 계산하므로 x 좌표만 필요
                         const xPercent = (dayIndex + 0.5) * (100 / 7);
 
                         return (
@@ -865,14 +880,14 @@ export function StatisticsView() {
                               left: `${xPercent}%`,
                               top: "0px",
                               transform: "translate(-50%, -50%)",
-                              zIndex: 10
+                              zIndex: 10,
                             }}
                           >
                             <NoteHead
                               note={noteData.note}
                               emotion={noteData.emotion}
                               score={noteData.score}
-                              contentLength={contentLength}
+                              contentLength={realContentLength}
                               size={35}
                             />
                           </div>

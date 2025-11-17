@@ -196,7 +196,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
         const all = [...prevRes.data, ...currentRes.data, ...nextRes.data];
 
-        // 날짜 기반 매핑 생성
+        // 감정 변환 맵
         const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
           '기쁨': 'JOY',
           '슬픔': 'SADNESS',
@@ -205,19 +205,53 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           '예민': 'SENSITIVE'
         };
 
+        // 1️⃣ calendar-notes 데이터 기반 기본 map 구성
         const map: Record<string, any> = {};
         all.forEach((n) => {
           const dateStr = n.date.split("T")[0];
           map[dateStr] = {
             ...n,
             emotion: emotionMap[n.emotionLabel] || 'APATHY',
-            contentLength: n.contentLength || 0,
+            contentLength: 0   // 일단 0 (추후 상세 조회에서 채움)
           };
         });
 
+        // 2️⃣ 현재 달의 날짜들 리스트 만들기
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const dateList: string[] = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          dateList.push(
+            `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          );
+        }
+
+        // 3️⃣ 날짜별로 상세 일기 API를 병렬 호출
+        const diaryResults = await Promise.all(
+          dateList.map((dateStr) => 
+            api.get(`/api/diaries?date=${dateStr}`).catch(() => null)
+          )
+        );
+
+        // 4️⃣ 상세 API의 contentLength 주입
+        diaryResults.forEach((res) => {
+          if (!res || !res.data) return;
+
+          const diary = res.data;
+          const dateStr = diary.date.split("T")[0];
+          const length = diary.content ? diary.content.length : 0;
+
+          if (!map[dateStr]) {
+            map[dateStr] = {}; // 없을 경우 생성
+          }
+
+          map[dateStr].contentLength = length;
+        });
+
+        // 5️⃣ 최종 map 반영
         setMonthNotes(map);
+
       } catch (e) {
-        console.error("월별 일기 불러오기 실패:", e);
+        console.error("월별 일기 + 글자수 로딩 실패:", e);
       }
     };
 
@@ -275,69 +309,6 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
     loadSampler();
   }, []);
-
-  // 음계를 주파수로 변환
-  const getNoteFrequency = (note: NoteType): number => {
-    const frequencies: Record<NoteType, number> = {
-      DO: 261.63,   // C4
-      RE: 293.66,   // D4
-      MI: 329.63,   // E4
-      FA: 349.23,   // F4
-      SOL: 392.00,  // G4
-      LA: 440.00,   // A4
-      SI: 493.88,   // B4
-      HDO: 523.25,  // C5
-      HRE: 587.33,  // D5
-      HMI: 659.25,  // E5
-      HFA: 698.46,  // F5
-      HSOL: 783.99, // G5
-      HLA: 880.00,  // A5
-      HSI: 987.77,  // B5
-    };
-    return frequencies[note];
-  };
-
-  // 악기별 음색 설정
-  const getInstrumentSettings = (instrument: string) => {
-    switch (instrument) {
-      case 'PIANO':
-        return { type: 'triangle' as OscillatorType, attack: 0.01, decay: 0.3 };
-      case 'GUITAR':
-        return { type: 'sawtooth' as OscillatorType, attack: 0.02, decay: 0.4 };
-      case 'VIOLIN':
-        return { type: 'sawtooth' as OscillatorType, attack: 0.1, decay: 0.5 };
-      case 'FLUTE':
-        return { type: 'sine' as OscillatorType, attack: 0.05, decay: 0.3 };
-      case 'MARIMBA':
-        return { type: 'square' as OscillatorType, attack: 0.01, decay: 0.2 };
-      default:
-        return { type: 'sine' as OscillatorType, attack: 0.01, decay: 0.3 };
-    }
-  };
-
-  // 음계 재생 함수
-  const playNote = async (frequency: number, duration: number, instrument: string) => {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    const settings = getInstrumentSettings(instrument);
-    oscillator.type = settings.type;
-    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-
-    // ADSR 엔벨로프
-    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + settings.attack);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + duration);
-
-    return new Promise(resolve => setTimeout(resolve, duration * 1000));
-  };
 
   // 해당 월의 악보 재생
   const playMonthScore = async () => {
