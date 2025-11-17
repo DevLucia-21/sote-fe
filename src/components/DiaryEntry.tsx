@@ -202,7 +202,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         keywordIds: userKeywords
             .filter(kw => keywords.includes(kw.content))
             .map(kw => kw.id),
-        emotionType: null,   // 또는 제외 가능
+        emotionType: diary.emotionType,   // 또는 제외 가능
       };
 
       let res;
