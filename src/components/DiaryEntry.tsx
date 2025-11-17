@@ -196,48 +196,44 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
   const handleSave = async (diary) => {
     try {
-      const payload = {
-        content: diary.content,
-        date: `${selectedYear}-${selectedMonth.padStart(2,"0")}-${selectedDay.padStart(2,"0")}`,
-        keywordIds: userKeywords
-            .filter(kw => keywords.includes(kw.content))
-            .map(kw => kw.id),
-      };
+      const commonKeywords = Array.isArray(userKeywords)
+        ? userKeywords.filter(kw => keywords.includes(kw.content)).map(kw => kw.id)
+        : [];
 
+      let payload;
       let res;
+
       if (diaryType === "text") {
+        payload = {
+          content: diary.content,
+          date: selectedDateStr,
+          keywordIds: commonKeywords,
+          writeType: "TEXT"
+        };
         res = await api.post("/api/diaries", payload);
       } 
       else if (diaryType === "voice") {
-        // ⚠️ 매개변수는 diary로 받아야 함
-        const payload = {
+        payload = {
           content: diary.content,
           date: selectedDateStr,
           keywordIds: diary.keywordIds,
           emotionType: diary.emotionType,
           sttId: diary.sttId,
+          writeType: "VOICE"
         };
 
-        // 서버에 STT 기반 일기 저장 요청
-        const res = await api.post("/api/diaries/stt", payload);
-        const savedDiaryId = res.data.id;
-
-        // 분석 요청에 필요한 데이터 저장
-        setPendingAnalysisPayload({
-          diaryId: savedDiaryId,
-          content: diary.content,
-          date: selectedDateStr,
-          keywordIds: diary.keywordIds,
-        });
-
-        setAnalysisState("analyzing");
-        return;
+        res = await api.post("/api/diaries/stt", payload);
       }
       else if (diaryType === "handwriting") {
-        res = await api.post("/api/diaries/canvas", {
-          ...payload,
-          canvasImageBase64: diary.imageBase64 ?? null
-        });
+        payload = {
+          content: diary.content,
+          date: selectedDateStr,
+          keywordIds: commonKeywords,
+          canvasImageBase64: diary.imageBase64 ?? null,
+          writeType: "HANDWRITING"
+        };
+
+        res = await api.post("/api/diaries/canvas", payload);
       }
 
       const savedDiaryId = res.data.id;
@@ -245,12 +241,14 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       setPendingAnalysisPayload({
         diaryId: savedDiaryId,
         content: diary.content,
-        date: payload.date,
+        date: selectedDateStr,
         keywordIds: payload.keywordIds
       });
 
       setAnalysisState("analyzing");
+
     } catch (err) {
+      console.error(err);
       toast.error("일기 저장 실패");
     }
   };
