@@ -13,6 +13,7 @@ import { Music, ArrowLeft, Check, Eye, EyeOff, CalendarIcon, ChevronDown } from 
 import type { CaptionProps } from 'react-day-picker@8.10.1';
 import { useNavigation } from 'react-day-picker@8.10.1';
 import { characterInfo, type CharacterType } from './common/characterImages';
+import { toast } from "sonner";
 
 interface AuthScreenProps {
   onLogin: () => void;
