@@ -97,6 +97,26 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
     return localStorage.getItem('watchConnected') === 'true';
   });
 
+  useEffect(() => {
+    async function fetchWatchStatus() {
+      try {
+        const res = await api.get("/api/watch/status");
+        const connected = res.data === true;
+
+        setIsWatchConnected(connected);
+        localStorage.setItem("watchConnected", connected ? "true" : "false");
+
+        if (connected) {
+          localStorage.setItem("healthDataConnected", "true");
+        }
+      } catch (err) {
+        console.error("워치 상태 조회 실패:", err);
+      }
+    }
+
+    fetchWatchStatus();
+  }, []);
+
   // 워치 연동 상태 변경 감지
   useEffect(() => {
     const handleStorageChange = () => {
@@ -1010,12 +1030,20 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
               className="h-auto p-1 text-xs flex-shrink-0"
               style={{ color: '#7B8B4F' }}
             >
-              {notifications.diary && notifications.challenge && notifications.emotionDone ? '전체 끄기' : '전체 켜기'}
+              {notifications.diary &&
+              notifications.challenge &&
+              notifications.emotionDone &&
+              notifications.musicRecommend &&
+              notifications.weeklyStats &&
+              notifications.reminderCustom
+                ? '전체 끄기'
+                : '전체 켜기'}
             </Button>
           </div>
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
+          {/* 오늘의 일기 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
               <p className="text-base leading-5" style={{ color: '#4A3228' }}>오늘의 일기 작성 알림</p>
@@ -1031,6 +1059,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
+          {/* 오늘의 챌린지 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
               <p className="text-base leading-5" style={{ color: '#4A3228' }}>오늘의 챌린지 수행 알림</p>
@@ -1046,6 +1075,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
+          {/* 감정 분석 완료 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
               <p className="text-base leading-5" style={{ color: '#4A3228' }}>감정 분석 완료 알림</p>
@@ -1054,6 +1084,54 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
               checked={notifications.emotionDone}
               onCheckedChange={(checked) => {
                 setNotifications(prev => ({ ...prev, emotionDone: checked }));
+                toast.success('저장됨');
+              }}
+            />
+          </div>
+
+          <Separator style={{ backgroundColor: '#E6E0D6' }} />
+
+          {/* 🎵 음악 추천 도착 */}
+          <div className="flex items-center py-5 px-5 gap-2">
+            <div className="flex-1">
+              <p className="text-base leading-5" style={{ color: '#4A3228' }}>음악 추천 알림</p>
+            </div>
+            <Switch
+              checked={notifications.musicRecommend}
+              onCheckedChange={(checked) => {
+                setNotifications(prev => ({ ...prev, musicRecommend: checked }));
+                toast.success('저장됨');
+              }}
+            />
+          </div>
+
+          <Separator style={{ backgroundColor: '#E6E0D6' }} />
+
+          {/* 📊 주간 통계 */}
+          <div className="flex items-center py-5 px-5 gap-2">
+            <div className="flex-1">
+              <p className="text-base leading-5" style={{ color: '#4A3228' }}>주간 감정 통계 알림</p>
+            </div>
+            <Switch
+              checked={notifications.weeklyStats}
+              onCheckedChange={(checked) => {
+                setNotifications(prev => ({ ...prev, weeklyStats: checked }));
+                toast.success('저장됨');
+              }}
+            />
+          </div>
+
+          <Separator style={{ backgroundColor: '#E6E0D6' }} />
+
+          {/* 🕒 사용자 맞춤 알림 */}
+          <div className="flex items-center py-5 px-5 gap-2">
+            <div className="flex-1">
+              <p className="text-base leading-5" style={{ color: '#4A3228' }}>사용자 맞춤 리마인더</p>
+            </div>
+            <Switch
+              checked={notifications.reminderCustom}
+              onCheckedChange={(checked) => {
+                setNotifications(prev => ({ ...prev, reminderCustom: checked }));
                 toast.success('저장됨');
               }}
             />
