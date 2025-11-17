@@ -71,19 +71,38 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         // 2) 분석 데이터 가져오기
         const analysisRes = await api.get(`/api/analysis/${diaryRes.data.id}`);
         const raw = analysisRes.data;
+        console.log("🔥🔥 [Analysis Raw Response]", JSON.stringify(raw, null, 2));
 
-        const challenge = await fetchChallenge();
+        let coverUrl = raw.selectedTrackCoverImageUrl;
 
-        // 3) MusicCard 형식으로 변환
+        // LP 목록에서 보정하기
+        if (!coverUrl) {
+          try {
+            const lpRes = await api.get("/api/lp/list");  // 🔥 허용된 API
+            const reward = lpRes.data.find(
+              (item: any) => item.rewardDate === diary.date
+            );
+
+            if (reward?.albumImageUrl) {
+              coverUrl = reward.albumImageUrl;
+              console.log("🎉 LP 목록에서 이미지 보정됨:", coverUrl);
+            }
+          } catch (e) {
+            console.log("⚠ LP 목록 조회 실패:", e);
+          }
+        }
+
+        // 🔥 3) MusicCard 데이터 구성
         const musicData = {
           title: raw.selectedTrackTitle,
           artist: raw.selectedTrackArtist,
           genre: raw.selectedTrackGenre,
-          reason: raw.emotionReason,
+          reason: raw.selectedTrackReason,
           album: raw.selectedTrackAlbum,
-          coverUrl: null
+          coverImageUrl: coverUrl, // ✨ 최종 보정된 URL
         };
 
+        const challenge = await fetchChallenge();
         const mappedChallenge = challenge
           ? {
               title: challenge.category,
@@ -278,9 +297,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           {/* Card 3: Music Recommendation - 이지모드에서 제거 */}
           {!isEasyMode && analysisData.music && (
             <MusicCard
-              music={analysisData.music}
+              title={analysisData.music.title}
+              artist={analysisData.music.artist}
+              album={analysisData.music.album}
+              genre={analysisData.music.genre}
+              coverImageUrl={analysisData.music.coverImageUrl}
+              reason={analysisData.music.reason}
               emotion={analysisData.emotion}
-              detailView={true}
             />
           )}
 

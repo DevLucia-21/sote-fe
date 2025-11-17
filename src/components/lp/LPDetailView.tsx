@@ -33,6 +33,7 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
   console.log("📌 [LPDetailView] 부모에서 받은 music:", music);
   const [emotionType, setEmotionType] = useState<string | null>(null);
   const [emotionLabel, setEmotionLabel] = useState<string | null>(null);
+  const [extraInfo, setExtraInfo] = useState({ genre: "", reason: "" });
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -56,6 +57,47 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
     }
 
     fetchEmotion();
+  }, [music.rewardDate]);
+
+  useEffect(() => {
+    async function fetchDiaryAndAnalysis() {
+      try {
+        // 1) 날짜로 일기 조회 → diaryId 가져오기
+        const diaryRes = await api.get(`/api/diaries?date=${music.rewardDate}`);
+        const diary = diaryRes.data;
+
+        if (!diary.id) {
+          console.log("⚠ 해당 날짜의 일기가 없습니다.");
+          setLoading(false);
+          return;
+        }
+
+        const diaryId = diary.id;
+
+        // 2) 분석 결과 조회
+        const analysisRes = await api.get(`/api/analysis/${diaryId}`);
+        const result = analysisRes.data;
+
+        console.log("🎧 분석 결과:", result);
+
+        // 감정
+        const type = result?.emotionLabel || null;
+        setEmotionLabel(type);
+
+        // 🔥 장르 및 이유 저장
+        setExtraInfo({
+          genre: result.selectedTrackGenre,
+          reason: result.selectedTrackReason,
+        });
+
+      } catch (err) {
+        console.error("⚠ 분석데이터 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDiaryAndAnalysis();
   }, [music.rewardDate]);
 
   if (loading) {
@@ -177,11 +219,18 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
             </Button>
           </div>
 
-          {/* 날짜 & 감정 */}
-          <div className="w-full mt-6">
+          {/* 날짜 & 감정 카드 */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="w-full mt-6"
+          >
             <Card className="bg-white/70 backdrop-blur-sm">
               <CardContent className="p-4">
                 <div className="space-y-2">
+
+                  {/* 날짜 */}
                   <div className="flex items-center space-x-2">
                     <Calendar className="w-4 h-4" style={{ color: lpBackgroundColor }} />
                     <span className="text-sm text-[#4A3228]">
@@ -193,30 +242,59 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
                     </span>
                   </div>
 
-                  {emotionType && (
-                    <>
-                      {console.log("🎨 [Badge 렌더링 체크]", {
-                        emotionType,
-                        emotionLabel,
-                        lpBackgroundColor,
-                      })}
-
-                      <Badge
-                        variant="secondary"
-                        className="text-xs mt-2"
-                        style={{
-                          backgroundColor: lpBackgroundColor + '30',
-                          color: "#6e746eff",
-                        }}
-                      >
-                        {emotionLabel}
-                      </Badge>
-                    </>
+                  {/* 감정 */}
+                  {emotionLabel && (
+                    <Badge
+                      variant="secondary"
+                      className="text-xs"
+                      style={{
+                        backgroundColor: emotionColors[emotionType] + '20',
+                        color: '#4A3228',
+                        border: 'none',
+                      }}
+                    >
+                      {emotionLabel}
+                    </Badge>
                   )}
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </motion.div>
+
+
+          {/* 추천 이유 */}
+          {extraInfo.reason && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="w-full mt-4"
+            >
+              <Card className="bg-white/70 backdrop-blur-sm">
+                <CardContent className="p-4">
+                  <div className="flex items-start space-x-3">
+
+                    {/* 아이콘 영역 */}
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: '#F5F1E8' }}
+                    >
+                      <Music className="w-4 h-4" style={{ color: lpBackgroundColor }} />
+                    </div>
+
+                    {/* 본문 */}
+                    <div className="flex-1">
+                      <h4 className="font-medium mb-1 text-[#4A3228]">추천 이유</h4>
+                      <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                        {extraInfo.reason}
+                      </p>
+                    </div>
+
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
         </div>
       </div>
     </div>

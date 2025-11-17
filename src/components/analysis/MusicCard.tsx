@@ -1,29 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import api from '../../services/api';
 import { motion } from 'motion/react';
 import { Music2 } from 'lucide-react';
 import { Card } from '../ui/card';
-import { MusicRecommendation, EmotionType } from './types';
+import { Badge } from '../ui/badge';
 import { emotionStyles } from './mockData';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 
 interface MusicCardProps {
-  music: MusicRecommendation;
-  emotion: EmotionType;
+  title: string;
+  artist: string;
+  album?: string;
+  genre?: string;
+  coverImageUrl?: string;
+  reason?: string;
+  emotion: string; // EmotionType
   detailView?: boolean;
 }
 
-export function MusicCard({ music, emotion, detailView = false }: MusicCardProps) {
-  const style = emotionStyles[emotion] || emotionStyles['기쁨']; // Fallback to default
-  const [lpToday, setLpToday] = useState(null);
-
-  useEffect(() => {
-    api.get("/api/lp/today")
-      .then(res => {
-        setLpToday(res.data);
-      })
-      .catch(err => console.error(err));
-  }, []);
+export function MusicCard({
+  title,
+  artist,
+  album,
+  genre,
+  coverImageUrl,
+  reason,
+  emotion,
+  detailView = false,
+}: MusicCardProps) {
+  const style = emotionStyles[emotion] || emotionStyles['기쁨'];
 
   return (
     <motion.div
@@ -32,38 +35,73 @@ export function MusicCard({ music, emotion, detailView = false }: MusicCardProps
       transition={{ duration: 0.5, delay: 0.2 }}
     >
       <Card className="overflow-hidden border-none shadow-lg">
+
         {/* Header */}
-        <div
-          className="p-6"
-          style={{ backgroundColor: style.backgroundColor }}
-        >
+        <div className="p-6" style={{ backgroundColor: style.backgroundColor }}>
           <div className="flex items-center gap-2">
             <Music2 className="w-5 h-5" style={{ color: style.accentColor }} />
-            <h3 style={{ color: style.accentColor }}>
-              오늘의 음악 추천
-            </h3>
+            <h3 style={{ color: style.accentColor }}>오늘의 음악 추천</h3>
           </div>
         </div>
 
-        {/* Music Info */}
-        <div className={detailView ? "px-6 pt-6 pb-6" : "px-6 pb-6"}>
-          <h4 className="mb-1" style={{ color: style.accentColor }}>
-            {music.title}
-          </h4>
-          <p className="text-muted-foreground mb-1">
-            {music.artist}
-          </p>
-          <p className="text-sm mb-4" style={{ color: '#7B8B4F' }}>
-            {music.genre}
-          </p>
+        {!detailView && coverImageUrl && (
+          <div className="flex justify-center px-6 py-4">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              className="w-48 h-48 rounded-xl shadow-lg overflow-hidden"
+            >
+              <ImageWithFallback
+                src={coverImageUrl}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
+            </motion.div>
+          </div>
+        )}
 
-          {/* Reason
-          <div className="bg-secondary rounded-xl p-4">
-            <p className="text-sm mb-1" style={{ color: '#7B8B4F' }}>추천 이유</p>
-            <p className="text-sm">
-              {music.reason}
+        {/* Content */}
+        <div className={detailView ? "px-6 pt-6 pb-6" : "px-6 pb-6"}>
+          {/* Album */}
+          {album && (
+            <p className="text-sm mb-2" style={{ color: '#7B8B4F' }}>
+              {`[ ${album} ]`}
             </p>
-          </div> */}
+          )}
+
+          {/* Title */}
+          <h4 className="text-muted-foreground mb-1">
+            {title}
+          </h4>
+
+          {/* Artist */}
+          <p className="mb-2" style={{ color: style.accentColor }}>{artist}</p>
+
+          {/* Genre */}
+          {genre && (
+            <Badge
+              variant="secondary"
+              className="text-xs"
+              style={{
+                backgroundColor: '#dfdfdfff',
+                color: '#4A3228',
+                border: 'none',
+              }}
+            >
+              {genre}
+            </Badge>
+          )}
+
+          {/* Reason */}
+          {reason && (
+            <div className="bg-secondary rounded-xl p-4 mt-3">
+              <p className="text-sm mb-1" style={{ color: '#7B8B4F' }}>추천 이유</p>
+              <p className="text-sm leading-relaxed text-[#4A3228]/80">
+                {reason}
+              </p>
+            </div>
+          )}
         </div>
       </Card>
     </motion.div>
