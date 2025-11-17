@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api'
 import { motion } from 'motion/react';
-import { ArrowLeft, FileText, Mic, Pencil } from 'lucide-react';
+import { ArrowLeft, FileText, Mic, Pencil, Image, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { DiaryEntry } from './types';
@@ -11,6 +11,13 @@ import { MusicCard } from '../analysis/MusicCard';
 import { ChallengeCard } from '../analysis/ChallengeCard';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import { CharacterType } from '../common/characterImages';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "../ui/dialog";
 
 interface DiaryDetailViewProps {
   diary: DiaryEntry;
@@ -32,6 +39,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
     "MARIMBA": "marimba",
   };
   const [userCharacter, setUserCharacter] = useState("PIANO");
+  const [isImageOpen, setIsImageOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function fetchChallenge() {
     try {
@@ -136,6 +146,19 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
     fetchData();
   }, [diary.date]);
 
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await api.delete("/api/diaries", { params: { date: diary.date } });
+      setDeleteOpen(false);
+      onBack?.();
+    } catch (err) {
+      console.error("❌ 일기 삭제 실패:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (loading || !diaryData || !analysisData) {
     return <div className="flex justify-center items-center min-h-screen py-20">로딩 중...</div>;
   }
@@ -196,7 +219,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           <h2 className="flex-1 text-center text-foreground">
             일기 상세
           </h2>
-          <div className="w-10" />
+          <Button 
+            variant="ghost"
+            onClick={() => setDeleteOpen(true)}
+            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Trash2 className="w-8 h-8" style={{ transform: "scale(1.4)", transformOrigin: "center" }} />
+          </Button>
         </div>
       </div>
 
@@ -233,6 +262,19 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
                     day: 'numeric',
                   })} 일기
                 </h3>
+
+                {diary.imageUrl && (
+                  <button
+                    onClick={() => setIsImageOpen(true)}
+                    className="ml-auto mr-2 flex items-center justify-center"
+                  >
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary text-xs text-foreground">
+                      <Image className="w-4 h-4" />
+                      <span>이미지 보기</span>
+                    </div>
+                  </button>
+                )}
+
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary text-xs text-foreground">
                   {getWriteTypeIcon()}
                   <span>{getWriteTypeLabel()}</span>
@@ -320,6 +362,49 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           )}
         </div>
       </div>
+
+      {isImageOpen && diary.imageUrl && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setIsImageOpen(false)}  // 바깥 클릭 → 닫기
+        >
+          <img
+            src={diary.imageUrl}
+            alt="full"
+            className="rounded-lg shadow-lg object-contain w-[280px] h-auto"
+            onClick={(e) => e.stopPropagation()} // 이미지 클릭 시 닫힘 방지
+          />
+        </div>
+      )}
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-center">일기를 삭제할까요?</DialogTitle>
+            <DialogDescription className="text-center">
+              삭제 후에는 되돌릴 수 없어요.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-3 mt-6">
+            <Button 
+              variant="outline"
+              className="flex-1"
+              onClick={() => setDeleteOpen(false)}
+            >
+              취소
+            </Button>
+
+            <Button 
+              className="flex-1 bg-red-500 text-white hover:bg-red-600"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "삭제 중..." : "삭제"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
