@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import api from '../../services/api'
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Play, Pause, Disc3, Sparkles } from 'lucide-react';
@@ -75,7 +76,12 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
                   initial={{ scale: 0 }}
                   animate={{ scale: showContent ? 1 : 0 }}
                   transition={{ delay: 0.8, type: 'spring', stiffness: 200 }}
-                  onClick={() => setIsPlaying(!isPlaying)}
+                  onClick={() => {
+                    setIsPlaying(!isPlaying)
+                    if (music.playUrl) {
+                      window.open(music.playUrl, "_blank", "noopener noreferrer");
+                    }
+                  }}
                   className="absolute -right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 rounded-full shadow-lg flex items-center justify-center bg-primary"
                 >
                   {isPlaying ? (
@@ -87,10 +93,23 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
               </div>
             </motion.div>
 
-            {/* 음악 정보 */}
-            <h5 className="text-sm text-muted-foreground text-center">
-              챌린지 달성 축하드려요 🎉
-            </h5>
+            {/* 정보 카드 */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: showContent ? 1 : 0 }}
+              transition={{ delay: 0.7 }}
+              className="space-y-3 bg-muted/30 rounded-lg p-4 border border-border shadow-sm"
+            >
+              <div>
+                <p className="text-xs text-muted-foreground">제목</p>
+                <p className="font-medium text-foreground text-base">{music.title}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">아티스트</p>
+                <p className="font-medium text-foreground text-sm">{music.artist}</p>
+              </div>
+            </motion.div>
 
             {/* 버튼 */}
             <motion.div

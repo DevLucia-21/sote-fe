@@ -46,32 +46,6 @@ export function ChallengeView() {
     fetchTodayChallenge();
   }, []);
 
-  useEffect(() => {
-    const fetchTodayMusic = async () => {
-      try {
-        const res = await api.get("/api/lp/today");
-
-        // 백엔드 응답 형태 그대로 담아줌
-        setMusicData({
-          title: res.data.title,
-          artist: res.data.artist,
-          albumImageUrl: res.data.albumImageUrl,
-          reason: res.data.reason || res.data.description || "",
-          playUrl: res.data.playUrl,
-        });
-
-        console.log("🔧 인터셉터 적용 후 res:", res);
-
-      } catch (err) {
-        console.error("❌ 오늘의 LP 음악 로딩 실패:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTodayMusic();
-  }, []);
-
   if (loading) {
     return (
       <div className="p-4">
@@ -94,6 +68,17 @@ export function ChallengeView() {
 
       setProgress(100);
       setIsCompleted(true);
+
+      const reward = res.data.reward;
+      if (reward) {
+        setMusicData({
+          title: reward.title,
+          artist: reward.artist,
+          albumImageUrl: reward.albumImageUrl,
+          reason: "오늘의 챌린지를 달성했어요! 🎉",
+          playUrl: reward.playUrl,
+        });
+      }
 
       // 완료 후 LP 보상 화면으로 이동
       setCurrentView('lp-reward');
