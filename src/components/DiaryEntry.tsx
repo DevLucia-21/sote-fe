@@ -239,9 +239,8 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
       setPendingAnalysisPayload({
         diaryId: savedDiaryId,
-        content: diary.content,
+        text: diary.content,
         date: selectedDateStr,
-        keywordIds: payload.keywordIds
       });
 
       setAnalysisState("analyzing");
