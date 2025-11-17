@@ -286,7 +286,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       formData.append("do_vad", "true");
 
       const res = await api.post("/ai/stt/transcribe", formData, {
-        baseURL: "http://localhost:8000",
+        baseURL: "https://sote-ai.onrender.com",
         headers: { "Content-Type": "multipart/form-data" },
       });
 

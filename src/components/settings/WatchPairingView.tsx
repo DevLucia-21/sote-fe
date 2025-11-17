@@ -127,7 +127,7 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
       let errorMessage = '코드 발급에 실패했습니다.';
       
       if (error.code === 'ERR_NETWORK') {
-        errorMessage = '서버에 연결할 수 없습니다. 백엔드 서버(localhost:8080)가 실행 중인지 확인해주세요.';
+        errorMessage = '서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.';
       } else if (error.response?.status === 401) {
         errorMessage = '인증이 만료되었습니다. 다시 로그인해주세요.';
         AuthStorage.clearTokens();
