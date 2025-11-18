@@ -76,7 +76,8 @@ const getStressLevelFromHrv = (hrv: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
 
 // ========== Component ==========
 
-export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
+export function WatchStressCard({ onNavigateToPairing }: { onNavigateToPairing?: () => void }) {
+  console.log("🔥 WatchStressCard props =", { onNavigateToPairing });
   const [period, setPeriod] = useState<Period>('7');
   // Set to null initially for loading state, true for connected, false for not connected
   // To test empty state: change initial value to false
@@ -169,7 +170,14 @@ export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
             </p>
             <Button 
               variant="outline"
-              onClick={() => onNavigateToPairing?.()}
+              onClick={() => {
+                console.log("버튼 클릭됨");
+                if (onNavigateToPairing) {
+                  onNavigateToPairing();
+                } else {
+                  console.warn("❌ onNavigateToPairing이 전달되지 않음!");
+                }
+              }}
               style={{ borderColor: '#7B8B4F', color: '#7B8B4F' }}
             >
               연동하기
