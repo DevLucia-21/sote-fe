@@ -14,6 +14,7 @@ import {
 import { MonthlyAnswers } from './questions/MonthlyAnswers';
 import { NoteHead } from './calendar/NoteHead';
 import { HealthStatsTab } from './statistics/HealthStatsTab';
+import { WatchPairingView } from './settings/WatchPairingView';
 import { 
   Music, 
   TrendingUp, 
