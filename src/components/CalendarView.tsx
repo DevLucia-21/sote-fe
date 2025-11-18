@@ -207,6 +207,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           '예민': 'SENSITIVE'
         };
 
+        console.log("🔍 [calendar-notes 현재월 RAW]", currentRes.data);
         // 1️⃣ calendar-notes 데이터 기반 기본 map 구성
         const map: Record<string, any> = {};
         all.forEach((n) => {
