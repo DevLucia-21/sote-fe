@@ -693,7 +693,10 @@ export function StatisticsView() {
 
       {/* 건강 탭이 선택되면 건강 통계만 표시 */}
       {selectedTab === 'health' ? (
-        <HealthStatsTab onNavigateToPairing={() => setShowPairing(true)} />
+        <HealthStatsTab 
+          isConnected={isHealthConnected === 'true'}
+          onNavigateToPairing={() => setShowPairing(true)}
+        />
       ) : (
         <>
       {/* 날짜 네비게이션 */}
