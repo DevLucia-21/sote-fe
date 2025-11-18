@@ -169,59 +169,40 @@ export function WatchPairingView({ onBack }: WatchPairingViewProps) {
     }
   }, [currentView, countdown, pairCode]);
 
-  // 페어링 상태 폴링 (워치가 페어링했는지 확인)
+  // 페어링 상태 폴링
   useEffect(() => {
-    if (isWaitingForPair) {
-      const pollInterval = setInterval(async () => {
-        try {
-          // 실제로는 백엔드에 워치 페어링 상태를 확인하는 API가 필요
-          // 현재는 Mock으로 10초 후 자동 연결
-          // TODO: 실제 API 구현 후 수정 필요
-        } catch (error) {
-          console.error('Error checking pair status:', error);
+    if (!isWaitingForPair || !pairCode) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.post("/api/watch/auth/pair");
+
+        if (res.data.paired) {
+          // 백엔드에서 받은 정보로 업데이트
+          localStorage.setItem("watchConnected", "true");
+          localStorage.setItem("watchModel", res.data.model);
+          localStorage.setItem("watchLastSync", res.data.lastSync);
+
+          setWatchData({
+            status: "연결됨",
+            model: res.data.model,
+            lastSync: res.data.lastSync,
+          });
+
+          toast.success("워치가 성공적으로 연동되었습니다!");
+
+          setIsWaitingForPair(false);
+          setCurrentView("success");
+
+          clearInterval(interval);
         }
-      }, 2000); // 2초마다 확인
 
-      // 페어링 상태 폴링
-      useEffect(() => {
-        if (!isWaitingForPair || !pairCode) return;
+      } catch (err) {
+        console.error("Pair polling error:", err);
+      }
+    }, 2000); // 2초마다 재확인
 
-        const interval = setInterval(async () => {
-          try {
-            const res = await api.post("/api/watch/auth/pair");
-
-            if (res.data.paired) {
-              // 백엔드에서 받은 정보로 업데이트
-              localStorage.setItem("watchConnected", "true");
-              localStorage.setItem("watchModel", res.data.model);
-              localStorage.setItem("watchLastSync", res.data.lastSync);
-
-              setWatchData({
-                status: "연결됨",
-                model: res.data.model,
-                lastSync: res.data.lastSync,
-              });
-
-              toast.success("워치가 성공적으로 연동되었습니다!");
-
-              setIsWaitingForPair(false);
-              setCurrentView("success");
-
-              clearInterval(interval);
-            }
-
-          } catch (err) {
-            console.error("Pair polling error:", err);
-          }
-        }, 2000); // 2초마다 재확인
-
-        return () => clearInterval(interval);
-      }, [isWaitingForPair, pairCode]);
-
-      return () => {
-        clearInterval(pollInterval);
-      };
-    }
+    return () => clearInterval(interval);
   }, [isWaitingForPair, pairCode]);
 
   // 포맷된 시간 (MM:SS)
