@@ -26,7 +26,7 @@ interface DailyHealthSummary {
   caffeineMg: number;
 }
 
-export function HealthStatsTab({ isConnected = true }: HealthStatsTabProps) {
+export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: HealthStatsTabProps) {
   const [health, setHealth] = useState<DailyHealthSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -68,16 +68,19 @@ export function HealthStatsTab({ isConnected = true }: HealthStatsTabProps) {
 
   if (!isConnected) {
     return (
-      <div className="space-y-4">
-        <Card className="bg-white/70 backdrop-blur-sm border-border p-8 text-center">
-          <Activity className="w-12 h-12 mx-auto mb-4" style={{ color: '#7B8B4F', opacity: 0.4 }} />
-          <h3 className="text-lg mb-2" style={{ color: '#4A3228' }}>건강 데이터 연동이 필요합니다</h3>
-          <p className="text-sm text-muted-foreground">
-            설정에서 건강 데이터를 연동하면<br />
-            워치·모바일의 건강 통계가 표시됩니다.
-          </p>
-        </Card>
-      </div>
+      <>
+        <WatchStressCard onNavigateToPairing={onNavigateToPairing} />
+        <div className="space-y-4">
+          <Card className="bg-white/70 backdrop-blur-sm border-border p-8 text-center">
+            <Activity className="w-12 h-12 mx-auto mb-4" style={{ color: '#7B8B4F', opacity: 0.4 }} />
+            <h3 className="text-lg mb-2" style={{ color: '#4A3228' }}>건강 데이터 연동이 필요합니다</h3>
+            <p className="text-sm text-muted-foreground">
+              설정에서 건강 데이터를 연동하면<br />
+              워치·모바일의 건강 통계가 표시됩니다.
+            </p>
+          </Card>
+        </div>
+      </>
     );
   }
 
