@@ -382,7 +382,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       date: selectedDate,
       keywordIds: realKeywordIds,
       emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
-      userId: Number(userId),
+      sttId: Number(sttId),
     });
     
     if (!sttId) {
