@@ -427,12 +427,17 @@ export function StatisticsView() {
         };
         loadProfile();
 
-        const offset = computeOffset(currentWeek.baseDate);
+        const baseD = currentWeek.baseDate;
+        const sunday = getSunday(baseD);
+
+        const startOfWeek = `${sunday.getFullYear()}-${String(
+          sunday.getMonth() + 1
+        ).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`;
 
         const challenge = await api.get("/api/statistics/challenges/completion-rate", {
           params: {
             period: "weekly",
-            offset: offset,
+            start: startOfWeek,
           }
         });
         setWeeklyChallengeStats(challenge.data);
@@ -1267,9 +1272,9 @@ export function StatisticsView() {
                         </div>
 
                         <div
-                          className="h-1.5 rounded-full overflow-hidden ml-7"
+                          className="h-2 rounded-full overflow-hidden"
                           style={{
-                            backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
+                            backgroundColor: "#E8EAD9",  
                           }}
                         >
                           <div
