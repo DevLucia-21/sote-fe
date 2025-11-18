@@ -117,6 +117,7 @@ export function EasyCalendarView() {
         "기쁨": "JOY",
         "슬픔": "SADNESS",
         "분노": "ANGER",
+        "화남": "ANGER",
         "무기력": "APATHY",
         "예민": "SENSITIVE",
       };
@@ -268,6 +269,7 @@ export function EasyCalendarView() {
       "기쁨": "JOY",
       "슬픔": "SADNESS",
       "분노": "ANGER",
+      "화남": "ANGER",
       "무기력": "APATHY",
       "예민": "SENSITIVE",
     };
@@ -559,6 +561,7 @@ export function EasyCalendarView() {
               ["#FFD700", "기쁨"],
               ["#4A90E2", "슬픔"],
               ["#E74C3C", "분노"],
+              ["#E74C3C", "화남"],
               ["#9B59B6", "예민"],
               ["#95A5A6", "무기력"],
             ].map(([color, label]) => (

@@ -1,6 +1,6 @@
 // Analysis Types
 
-export type EmotionType = '기쁨' | '슬픔' | '분노' | '예민' | '무기력';
+export type EmotionType = '기쁨' | '슬픔' | '분노' | '화남' | '예민' | '무기력';
 
 export type InstrumentType = 'guitar' | 'piano' | 'drum' | 'violin' | 'saxophone';
 

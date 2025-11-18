@@ -1,7 +1,7 @@
 // Diary types and interfaces
 
 export type WriteType = 'TEXT' | 'VOICE' | 'HANDWRITING';
-export type EmotionType = '기쁨' | '슬픔' | '분노' | '예민' | '무기력';
+export type EmotionType = '기쁨' | '슬픔' | '분노' | '화남' | '예민' | '무기력';
 export type AnalysisStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
 export interface Diary {
@@ -36,6 +36,7 @@ export const EMOTION_COLORS: Record<EmotionType, { bg: string; text: string; bor
   '기쁨': { bg: '#FFF9E6', text: '#F59E0B', border: '#FDE68A' },
   '슬픔': { bg: '#EFF6FF', text: '#3B82F6', border: '#BFDBFE' },
   '분노': { bg: '#FEE2E2', text: '#EF4444', border: '#FECACA' },
+  '화남': { bg: '#FEE2E2', text: '#EF4444', border: '#FECACA' },
   '예민': { bg: '#F3E8FF', text: '#A855F7', border: '#E9D5FF' },
   '무기력': { bg: '#F3F4F6', text: '#6B7280', border: '#D1D5DB' }
 };

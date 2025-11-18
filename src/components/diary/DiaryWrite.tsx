@@ -53,6 +53,7 @@ const emotionMap: Record<EmotionType, string> = {
   기쁨: "JOY",
   슬픔: "SADNESS",
   분노: "ANGER",
+  화남: "ANGER",
   무기력: "APATHY",
   예민: "SENSITIVE",
 };
@@ -113,7 +114,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     };
   });
 
-  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
+  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '화남', '예민', '무기력'];
 
   // 캔버스 초기화 useEffect
   useEffect(() => {

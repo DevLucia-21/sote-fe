@@ -49,6 +49,7 @@ const emotionToAPI: Record<string, EmotionAPIType> = {
   '기쁨': 'JOY',
   '슬픔': 'SADNESS',
   '분노': 'ANGER',
+  '화남': 'ANGER',
   '무기력': 'APATHY',
   '예민': 'SENSITIVE',
 };
