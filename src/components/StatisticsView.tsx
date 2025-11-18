@@ -454,8 +454,7 @@ export function StatisticsView() {
         const diary = await api.get("/api/statistics/diary", {
           params: {
             period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
+            month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`,
           }
         });
         console.log("year:", currentMonth.year, "month:", currentMonth.month)
