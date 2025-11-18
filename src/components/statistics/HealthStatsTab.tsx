@@ -140,11 +140,6 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
   // ============================================
   return (
     <div className="space-y-4">
-      {/* 🔍 최상단 디버깅 로그 */}
-      <pre className="text-xs text-gray-500">
-        {JSON.stringify({ isConnected, loading, health }, null, 2)}
-      </pre>
-
       {/* 스트레스 데이터 */}
       <WatchStressCard onNavigateToPairing={handlePairingNavigate} />
 
