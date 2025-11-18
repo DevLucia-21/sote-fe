@@ -37,6 +37,10 @@ interface StressStatsItem {
   stressLevel: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
+interface WatchStressCardProps {
+  onNavigateToPairing?: () => void;
+}
+
 type Period = '7' | '30';
 
 // ========== Constants ==========
@@ -71,7 +75,7 @@ const getStressLevelFromHrv = (hrv: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
 
 // ========== Component ==========
 
-export function WatchStressCard() {
+export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
   const [period, setPeriod] = useState<Period>('7');
   // Set to null initially for loading state, true for connected, false for not connected
   // To test empty state: change initial value to false
@@ -164,10 +168,7 @@ export function WatchStressCard() {
             </p>
             <Button 
               variant="outline"
-              onClick={() => {
-                // TODO: Navigate to settings/devices when route is available
-                console.log('Navigate to settings/devices');
-              }}
+              onClick={() => onNavigateToPairing && onNavigateToPairing()}
               style={{ borderColor: '#7B8B4F', color: '#7B8B4F' }}
             >
               연동하기
