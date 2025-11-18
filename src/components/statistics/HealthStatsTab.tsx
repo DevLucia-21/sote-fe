@@ -34,6 +34,12 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
   const [waterInput, setWaterInput] = useState(0);
   const [caffeineInput, setCaffeineInput] = useState(0);
 
+  const handlePairingNavigate = () => {
+    if (onNavigateToPairing) {
+      onNavigateToPairing();  // 부모가 준 함수 실행
+    }
+  };
+
   // ============================================
   // 📌 오늘의 건강 데이터 조회
   // ============================================
@@ -70,7 +76,7 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
   if (!isConnected) {
     return (
       <>
-        <WatchStressCard onNavigateToPairing={onNavigateToPairing} />
+        <WatchStressCard onNavigateToPairing={handlePairingNavigate} />
         <div className="space-y-4">
           <Card className="bg-white/70 backdrop-blur-sm border-border p-8 text-center">
             <Activity className="w-12 h-12 mx-auto mb-4" style={{ color: '#7B8B4F', opacity: 0.4 }} />

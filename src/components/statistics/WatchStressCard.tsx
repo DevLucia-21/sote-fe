@@ -22,7 +22,6 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Activity, Watch, AlertCircle } from 'lucide-react';
-import { WatchPairingView } from '../settings/WatchPairingView';
 
 // ========== Types ==========
 
