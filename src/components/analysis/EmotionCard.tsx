@@ -28,7 +28,6 @@ const emotionIcons: Record<EmotionType, typeof Smile> = {
   기쁨: Smile,
   슬픔: Frown,
   분노: Flame,
-  화남: Flame,
   무기력: Battery,
   예민: Zap,
 };
@@ -38,7 +37,6 @@ const emotionToAPI: Record<EmotionType, EmotionAPIType> = {
   '기쁨': 'JOY',
   '슬픔': 'SADNESS',
   '분노': 'ANGER',
-  '화남': 'ANGER',
   '무기력': 'APATHY',
   '예민': 'SENSITIVE',
 };
