@@ -696,7 +696,7 @@ export function StatisticsView() {
           </button>
         </div>
 
-        {selectedTab === 'health' ? (
+        {selectedTab === 'health' && (
           <HealthStatsTab
             isConnected={isHealthConnected === 'true'}
             onNavigateToPairing={() => {
@@ -704,853 +704,857 @@ export function StatisticsView() {
               setShowPairing(true);
             }}
           />
-        ) : null}
-
-        {/* 날짜 네비게이션 */}
-        {selectedPeriod === 'week' ? (
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleWeekChange('prev')}
-              className="text-[#4A3228]"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-[#4A3228]">
-                  {year}년 {month}월 {week}주차
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <div className="p-2 space-y-2">
-                  <div>
-                    <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
-                      년도
-                    </p>
-                    <div className="grid grid-cols-3 gap-1">
-                      {[2020, 2021, 2022, 2023, 2024, 2025].map((year) => (
-                        <Button
-                          key={year}
-                          variant={year === currentWeek.year ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleWeekDateSelect(year, currentWeek.month, currentWeek.week)}
-                        >
-                          {year}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
-                      월
-                    </p>
-                    <div className="grid grid-cols-6 gap-1">
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                        <Button
-                          key={month}
-                          variant={month === currentWeek.month ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleWeekDateSelect(currentWeek.year, month, currentWeek.week)}
-                        >
-                          {month}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
-                      주차
-                    </p>
-                    <div className="grid grid-cols-5 gap-1">
-                      {[1, 2, 3, 4, 5].map((week) => (
-                        <Button
-                          key={week}
-                          variant={week === currentWeek.week ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleWeekDateSelect(currentWeek.year, currentWeek.month, week)}
-                        >
-                          {week}주
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleWeekChange('next')}
-              className="text-[#4A3228]"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        ) : selectedPeriod === 'month' ? (
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleMonthChange('prev')}
-              className="text-[#4A3228]"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="text-[#4A3228]">
-                  {currentMonth.year}년 {currentMonth.month}월
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <div className="p-2 space-y-2">
-                  <div>
-                    <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
-                      년도
-                    </p>
-                    <div className="grid grid-cols-3 gap-1">
-                      {[2020, 2021, 2022, 2023, 2024, 2025].map((year) => (
-                        <Button
-                          key={year}
-                          variant={year === currentMonth.year ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleMonthDateSelect(year, currentMonth.month)}
-                        >
-                          {year}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
-                      월
-                    </p>
-                    <div className="grid grid-cols-6 gap-1">
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                        <Button
-                          key={month}
-                          variant={month === currentMonth.month ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-8"
-                          onClick={() => handleMonthDateSelect(currentMonth.year, month)}
-                        >
-                          {month}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleMonthChange('next')}
-              className="text-[#4A3228]"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        ) : null}
-
-        {/* ========== 주간 탭 ========== */}
-        {selectedPeriod === 'week' && (
-          <>
-            {/* 1️⃣ 이번 주 감정 악보 */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center">
-                    <Music className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                    이번 주 감정 악보
-                  </CardTitle>
-                  <Button
-                    size="sm"
-                    onClick={playMelody}
-                    disabled={isPlaying || weeklyNotes.length === 0}
-                    style={{ backgroundColor: isPlaying ? '#5D3F35' : '#7B8B4F', color: 'white' }}
-                  >
-                    {isPlaying ? (
-                      <>
-                        <Pause className="w-4 h-4 mr-1" />
-                        정지
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4 mr-1" />
-                        재생
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {isLoadingWeekly ? (
-                  <Skeleton className="h-48 w-full" />
-                ) : weeklyNotes.length === 0 ? (
-                  <div className="text-center py-8 text-sm text-gray-500">데이터가 없어요.</div>
-                ) : (
-                  <div className="relative rounded-lg p-2">
-                    {/* =====  오선  ===== */}
-                    <div className="relative" style={{ height: '140px' }}>
-                      {[44, 58, 72, 86, 100].map((yPos, index) => (
-                        <div
-                          key={index}
-                          className="absolute"
-                          style={{
-                            top: `${yPos}px`,
-                            left: 0,
-                            width: '100%',
-                            height: '1.5px',
-                            backgroundColor: 'var(--staff-line-color, #4A3228)',
-                            opacity: 'var(--staff-line-opacity, 0.4)'
-                          }}
-                        />
-                      ))}
-
-                      {/* =====  주간 음표 그리기  ===== */}
-                      {(() => {
-                        const dateList = getWeekDateListByBase(currentWeek.baseDate);
-
-                        const sortedNotes = dateList.map((d) =>
-                          weeklyNotes.find((n) => normalize(n.date) === d) || null
-                        );
-
-                        return sortedNotes.map((noteData, dayIndex) => {
-                          if (!noteData) return null;
-
-                          const dateStr = normalize(noteData.date);
-
-                          // 🔥 map 안에서는 hook 금지 → 미리 계산한 weeklyContentLengths 사용
-                          const realContentLength =
-                            weeklyContentLengths[dateStr] ?? 0;
-
-                          const xPercent = (dayIndex + 0.5) * (100 / 7);
-
-                          return (
-                            <div
-                              key={noteData.date}
-                              className="absolute"
-                              style={{
-                                left: `${xPercent}%`,
-                                top: "0px",
-                                transform: "translate(-50%, -50%)",
-                                zIndex: 10,
-                              }}
-                            >
-                              <NoteHead
-                                note={noteData.note}
-                                emotion={noteData.emotion}
-                                score={noteData.score}
-                                contentLength={realContentLength}
-                                size={35}
-                              />
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-
-                    {/* ===== 요일 + 감정 텍스트 ===== */}
-                    <div className="grid grid-cols-7 gap-0 mt-6">
-                      {(() => {
-                        const dateList = getWeekDateListByBase(currentWeek.baseDate);
-
-                        return dateList.map((dateStr, i) => {
-                          const noteData = weeklyNotes.find(n => normalize(n.date) === dateStr);
-                          const dayName = dayOfWeekNames[i];
-
-                          return (
-                            <div key={i} className="flex-1 text-center">
-                              <span className={`text-xs block ${noteData ? 'font-medium' : 'text-gray-400'}`}>
-                                {dayName}
-                              </span>
-                              {noteData && (
-                                <div className="text-[10px] mt-0.5" style={{ color: '#7B8B4F' }}>
-                                  {emotionNames[noteData.emotion]}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 2️⃣ 챌린지 완료율 (주간) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Target className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  이번 주 챌린지 완료율
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingWeekly ? (
-                  <Skeleton className="h-20 w-full" />
-                ) : !weeklyChallengeStats ? (
-                  <div className="text-center py-4 text-sm text-gray-500">
-                    데이터가 없어요.
-                  </div>
-                ) : (
-                  (() => {
-                    const total = weeklyChallengeStats?.totalChallenges ?? 0;
-                    const completed = weeklyChallengeStats?.completedChallenges ?? 0;
-                    const rate = weeklyChallengeStats?.completionRate ?? 0;
-
-                    return (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-3xl font-semibold" style={{ color: '#7B8B4F' }}>
-                            {Math.round(rate * 100)}%
-                          </span>
-                        </div>
-                        <Progress value={rate * 100} className="h-3" />
-                        <p className="text-sm text-center" style={{ color: '#4A3228', opacity: 0.7 }}>
-                          총 {total}개 중 {completed}개 완료
-                        </p>
-                      </div>
-                    );
-                  })()
-                )}
-              </CardContent>
-            </Card>
-          </>
         )}
 
-        {/* ========== 월간 탭 ========== */}
-        {selectedPeriod === 'month' && (
+        {selectedTab === 'emotion' && (
           <>
-            {/* 1️⃣ 일기 기록 현황 (월간) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <BookOpen className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  일기 기록 현황
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingMonthly ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <div className="flex items-center gap-4 py-2">
-                    <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
-                      {monthlyDiaryStats?.monthlyCount || 0}
-                    </p>
-                    <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
-                      개의 일기를 작성했어요
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* 날짜 네비게이션 */}
+            {selectedPeriod === 'week' ? (
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleWeekChange('prev')}
+                  className="text-[#4A3228]"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
 
-            {/* 2️⃣ 감정별 챌린지 수행 현황 (월간) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Activity className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  감정별 챌린지 수행 현황
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingMonthly ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full" />)}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {monthlyChallengePerformance && Object.entries(monthlyChallengePerformance).length > 0 ? (
-                      Object.entries(monthlyChallengePerformance).map(([emotion, stats]) => {
-                        const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
-                        const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                        const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
-
-                        return (
-                          <div key={emotion} className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                {EmotionIcon && (
-                                  <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
-                                )}
-                                <span className="text-sm">
-                                  {emotionNames[emotion as keyof typeof emotionNames]}
-                                </span>
-                              </div>
-                              <span className="text-sm font-medium">
-                                {stats.completed}/{stats.total}개
-                              </span>
-                            </div>
-
-                            <div
-                              className="h-1.5 rounded-full overflow-hidden ml-7"
-                              style={{
-                                backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
-                              }}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="text-[#4A3228]">
+                      {year}년 {month}월 {week}주차
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    <div className="p-2 space-y-2">
+                      <div>
+                        <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
+                          년도
+                        </p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[2020, 2021, 2022, 2023, 2024, 2025].map((year) => (
+                            <Button
+                              key={year}
+                              variant={year === currentWeek.year ? 'default' : 'ghost'}
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleWeekDateSelect(year, currentWeek.month, currentWeek.week)}
                             >
-                              <div
-                                style={{
-                                  width: `${percentage}%`,
-                                  height: "100%",
-                                  backgroundColor: "#7B8B4F",
-                                  transition: "width 0.3s ease",
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })
+                              {year}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
+                          월
+                        </p>
+                        <div className="grid grid-cols-6 gap-1">
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                            <Button
+                              key={month}
+                              variant={month === currentWeek.month ? 'default' : 'ghost'}
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleWeekDateSelect(currentWeek.year, month, currentWeek.week)}
+                            >
+                              {month}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
+                          주차
+                        </p>
+                        <div className="grid grid-cols-5 gap-1">
+                          {[1, 2, 3, 4, 5].map((week) => (
+                            <Button
+                              key={week}
+                              variant={week === currentWeek.week ? 'default' : 'ghost'}
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleWeekDateSelect(currentWeek.year, currentWeek.month, week)}
+                            >
+                              {week}주
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleWeekChange('next')}
+                  className="text-[#4A3228]"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : selectedPeriod === 'month' ? (
+              <div className="flex items-center justify-center gap-2 mb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleMonthChange('prev')}
+                  className="text-[#4A3228]"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="text-[#4A3228]">
+                      {currentMonth.year}년 {currentMonth.month}월
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56">
+                    <div className="p-2 space-y-2">
+                      <div>
+                        <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
+                          년도
+                        </p>
+                        <div className="grid grid-cols-3 gap-1">
+                          {[2020, 2021, 2022, 2023, 2024, 2025].map((year) => (
+                            <Button
+                              key={year}
+                              variant={year === currentMonth.year ? 'default' : 'ghost'}
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleMonthDateSelect(year, currentMonth.month)}
+                            >
+                              {year}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs mb-1 px-2" style={{ color: '#4A3228', opacity: 0.6 }}>
+                          월
+                        </p>
+                        <div className="grid grid-cols-6 gap-1">
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                            <Button
+                              key={month}
+                              variant={month === currentMonth.month ? 'default' : 'ghost'}
+                              size="sm"
+                              className="h-8"
+                              onClick={() => handleMonthDateSelect(currentMonth.year, month)}
+                            >
+                              {month}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleMonthChange('next')}
+                  className="text-[#4A3228]"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : null}
+
+            {/* ========== 주간 탭 ========== */}
+            {selectedPeriod === 'week' && (
+              <>
+                {/* 1️⃣ 이번 주 감정 악보 */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center">
+                        <Music className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                        이번 주 감정 악보
+                      </CardTitle>
+                      <Button
+                        size="sm"
+                        onClick={playMelody}
+                        disabled={isPlaying || weeklyNotes.length === 0}
+                        style={{ backgroundColor: isPlaying ? '#5D3F35' : '#7B8B4F', color: 'white' }}
+                      >
+                        {isPlaying ? (
+                          <>
+                            <Pause className="w-4 h-4 mr-1" />
+                            정지
+                          </>
+                        ) : (
+                          <>
+                            <Play className="w-4 h-4 mr-1" />
+                            재생
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingWeekly ? (
+                      <Skeleton className="h-48 w-full" />
+                    ) : weeklyNotes.length === 0 ? (
+                      <div className="text-center py-8 text-sm text-gray-500">데이터가 없어요.</div>
                     ) : (
+                      <div className="relative rounded-lg p-2">
+                        {/* =====  오선  ===== */}
+                        <div className="relative" style={{ height: '140px' }}>
+                          {[44, 58, 72, 86, 100].map((yPos, index) => (
+                            <div
+                              key={index}
+                              className="absolute"
+                              style={{
+                                top: `${yPos}px`,
+                                left: 0,
+                                width: '100%',
+                                height: '1.5px',
+                                backgroundColor: 'var(--staff-line-color, #4A3228)',
+                                opacity: 'var(--staff-line-opacity, 0.4)'
+                              }}
+                            />
+                          ))}
+
+                          {/* =====  주간 음표 그리기  ===== */}
+                          {(() => {
+                            const dateList = getWeekDateListByBase(currentWeek.baseDate);
+
+                            const sortedNotes = dateList.map((d) =>
+                              weeklyNotes.find((n) => normalize(n.date) === d) || null
+                            );
+
+                            return sortedNotes.map((noteData, dayIndex) => {
+                              if (!noteData) return null;
+
+                              const dateStr = normalize(noteData.date);
+
+                              // 🔥 map 안에서는 hook 금지 → 미리 계산한 weeklyContentLengths 사용
+                              const realContentLength =
+                                weeklyContentLengths[dateStr] ?? 0;
+
+                              const xPercent = (dayIndex + 0.5) * (100 / 7);
+
+                              return (
+                                <div
+                                  key={noteData.date}
+                                  className="absolute"
+                                  style={{
+                                    left: `${xPercent}%`,
+                                    top: "0px",
+                                    transform: "translate(-50%, -50%)",
+                                    zIndex: 10,
+                                  }}
+                                >
+                                  <NoteHead
+                                    note={noteData.note}
+                                    emotion={noteData.emotion}
+                                    score={noteData.score}
+                                    contentLength={realContentLength}
+                                    size={35}
+                                  />
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+
+                        {/* ===== 요일 + 감정 텍스트 ===== */}
+                        <div className="grid grid-cols-7 gap-0 mt-6">
+                          {(() => {
+                            const dateList = getWeekDateListByBase(currentWeek.baseDate);
+
+                            return dateList.map((dateStr, i) => {
+                              const noteData = weeklyNotes.find(n => normalize(n.date) === dateStr);
+                              const dayName = dayOfWeekNames[i];
+
+                              return (
+                                <div key={i} className="flex-1 text-center">
+                                  <span className={`text-xs block ${noteData ? 'font-medium' : 'text-gray-400'}`}>
+                                    {dayName}
+                                  </span>
+                                  {noteData && (
+                                    <div className="text-[10px] mt-0.5" style={{ color: '#7B8B4F' }}>
+                                      {emotionNames[noteData.emotion]}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 2️⃣ 챌린지 완료율 (주간) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Target className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      이번 주 챌린지 완료율
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingWeekly ? (
+                      <Skeleton className="h-20 w-full" />
+                    ) : !weeklyChallengeStats ? (
                       <div className="text-center py-4 text-sm text-gray-500">
                         데이터가 없어요.
                       </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    ) : (
+                      (() => {
+                        const total = weeklyChallengeStats?.totalChallenges ?? 0;
+                        const completed = weeklyChallengeStats?.completedChallenges ?? 0;
+                        const rate = weeklyChallengeStats?.completionRate ?? 0;
 
-            {/* 3️⃣ 음악 추천 통계 (월간) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Headphones className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  음악 추천 통계
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingMonthly ? (
-                  <Skeleton className="h-32 w-full" />
-                ) : !monthlyMusicStats ? (
-                  <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
-                ) : (
-                  <div className="space-y-4">
-
-                    {/* ===============================
-                        1) topGenre 계산
-                    =============================== */}
-                    {(() => {
-                      let topGenre = "-";
-                      let topCount = -1;
-
-                      const mappings = monthlyMusicStats.emotionGenreMapping ?? {};
-
-                      // 감정별 → 장르별 → 수치 비교
-                      Object.values(mappings).forEach((genres) => {
-                        Object.entries(genres).forEach(([genre, count]) => {
-                          if (count > topCount) {
-                            topCount = count;
-                            topGenre = genre;
-                          }
-                        });
-                      });
-
-                      return (
-                        <div className="bg-gradient-to-r from-[#7B8B4F]/10 to-[#7B8B4F]/5 rounded-lg p-4 text-center">
-                          <p className="text-sm mb-1" style={{ color: '#4A3228', opacity: 0.7 }}>
-                            가장 많이 추천된 장르
-                          </p>
-                          <p className="text-xl font-semibold" style={{ color: '#7B8B4F' }}>
-                            {topGenre} 🎷
-                          </p>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ===============================
-                        2) 감정별 상세 breakdown
-                    =============================== */}
-                    <div className="space-y-4">
-                      <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
-                        감정별 추천 상세 내역
-                      </p>
-
-                      {monthlyMusicStats.emotionGenreMapping &&
-                        Object.entries(monthlyMusicStats.emotionGenreMapping).length > 0 ? (
-                        Object.entries(monthlyMusicStats.emotionGenreMapping).map(([emotionKo, genres]) => {
-                          const emotion =
-                            emotionKo === '기쁨' ? 'JOY' :
-                            emotionKo === '슬픔' ? 'SADNESS' :
-                            emotionKo === '분노' ? 'ANGER' :
-                            emotionKo === '화남' ? 'ANGER' :
-                            emotionKo === '무기력' ? 'APATHY' :
-                            emotionKo === '예민' ? 'SENSITIVE' : 'APATHY';
-
-                          const totalCount = Object.values(genres).reduce((a, b) => a + b, 0);
-                          const EmotionIcon = emotionIcons[emotion];
-                          const colorClass = emotionColorClasses[emotion];
-
-                          return (
-                            <div key={emotion} className="p-3 border rounded-lg bg-white/60">
-                              <div className="flex items-center gap-2 mb-2">
-                                {EmotionIcon && (
-                                  <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
-                                )}
-                                <span className="text-sm font-medium">
-                                  {emotionKo} ({totalCount}곡)
-                                </span>
-                              </div>
-
-                              <div className="pl-2 space-y-1">
-                                {Object.entries(genres).map(([genre, count]) => (
-                                  <div key={genre} className="flex items-center justify-between text-sm">
-                                    <span>{genre}</span>
-                                    <span style={{ color: '#7B8B4F' }}>{count}곡</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
-                      )}
-                    </div>
-
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 4️⃣ 키워드 랭킹 (월간) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Hash className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  키워드 랭킹
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingMonthly ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => <Skeleton key={i} className="h-8 w-full" />)}
-                  </div>
-                ) : monthlyKeywords.length === 0 ? (
-                  <div className="text-center py-4 text-sm text-gray-500">
-                    데이터가 없어요.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {monthlyKeywords.map((keyword, index) => {
-                      const maxCount = monthlyKeywords[0]?.count || 1;
-                      const percentage = (keyword.count / maxCount) * 70;
-
-                      return (
-                        <div key={index} className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <span
-                                className="text-xs font-medium"
-                                style={{
-                                  color: 'var(--primary)',
-                                  minWidth: '20px',
-                                }}
-                              >
-                                {index + 1}
-                              </span>
-
-                              <span className="text-sm">{keyword.keyword}</span>
-                            </div>
-
-                            <span
-                              className="text-sm font-medium"
-                              style={{ color: 'var(--primary)' }}
-                            >
-                              {keyword.count}회
-                            </span>
-                          </div>
-
-                          <div
-                            className="h-2 rounded-full overflow-hidden"
-                            style={{
-                              backgroundColor: "#E8EAD9",  
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${percentage}%`,
-                                height: "100%",
-                                backgroundColor: "#7B8B4F",
-                                transition: "width 0.3s ease",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {/* ========== 누적 탭 ========== */}
-        {selectedPeriod === 'total' && (
-          <>
-            {/* 1️⃣ 일기 총 작성 수 (누적) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <BookOpen className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  일기 총 작성 수
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingTotal ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <div className="flex items-center gap-4 py-2">
-                    <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
-                      {totalDiaryCount}
-                    </p>
-                    <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
-                      개의 이야기가 쌓였어요
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 2️⃣ 감정 분포 비율 (누적) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Sparkles className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  감정 분포 비율
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingTotal ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
-                  </div>
-                ) : !totalEmotionDistribution || Object.keys(totalEmotionDistribution ?? {}).length === 0 ? (
-                  <div className="text-center py-4 text-sm text-gray-500">
-                    데이터가 없어요.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {Object.entries(totalEmotionDistribution ?? {}).map(([emoKo, count]) => {
-                      const emotion =
-                        emoKo === '기쁨' ? 'JOY' :
-                        emoKo === '슬픔' ? 'SADNESS' :
-                        emoKo === '분노' ? 'ANGER' :
-                        emoKo === '화남' ? 'ANGER' :
-                        emoKo === '무기력' ? 'APATHY' :
-                        emoKo === '예민' ? 'SENSITIVE' :
-                        'APATHY';
-
-                      const total = Object.values(totalEmotionDistribution ?? {}).reduce((a, b) => a + b, 0);
-                      const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-                      const EmotionIcon = emotionIcons[emotion];
-                      const colorClass = emotionColorClasses[emotion];
-
-                      return (
-                        <div key={emotion} className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              {EmotionIcon && <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />}
-                              <span className="text-sm">
-                                {emotionNames[emotion]}
+                        return (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-3xl font-semibold" style={{ color: '#7B8B4F' }}>
+                                {Math.round(rate * 100)}%
                               </span>
                             </div>
-                            <span className="text-sm font-medium">{percentage}%</span>
-                          </div>
-                          <Progress value={percentage} className="h-2" />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 3️⃣ 획득한 뱃지 (누적) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Award className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  획득한 뱃지
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingTotal ? (
-                  <Skeleton className="h-16 w-full" />
-                ) : (
-                  <div className="flex items-center gap-4 py-2">
-                    <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
-                      {totalBadgeCount}
-                    </p>
-                    <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
-                      개의 뱃지를 획득했어요
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 4️⃣ 기분 랭킹 (누적) */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Trophy className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  기분 랭킹
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingTotal ? (
-                  <Skeleton className="h-48 w-full" />
-                ) : !moodRanking || !moodRanking.emotionToKeywords ? (
-                  <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
-                ) : (
-                  <div className="space-y-6">
-
-                    {Object.entries(moodRanking.emotionToKeywords).map(([emotion, keywords]) => {
-                      const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
-                      const emotionName = emotionNames[emotion as keyof typeof emotionNames];
-                      const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
-
-                      return (
-                        <div key={emotion}>
-                          <div className="flex items-center gap-2 mb-3">
-                            {EmotionIcon && (
-                              <EmotionIcon className="w-4 h-4" style={{ color: colorClass.bar }} />
-                            )}
-                            <p className="text-sm" style={{ color: '#7B8B4F' }}>
-                              {emotionName}를 느낄 때 자주 등장한 키워드
+                            <Progress value={rate * 100} className="h-3" />
+                            <p className="text-sm text-center" style={{ color: '#4A3228', opacity: 0.7 }}>
+                              총 {total}개 중 {completed}개 완료
                             </p>
                           </div>
+                        );
+                      })()
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
 
-                          <div className="grid grid-cols-3 gap-2">
-                            {keywords.length > 0 ? (
-                              keywords.map((keyword, index) => (
-                                <div
-                                  key={index}
-                                  className="bg-gradient-to-br from-[#7B8B4F]/5 to-[#7B8B4F]/10 rounded-lg p-3 text-center border"
-                                  style={{ borderColor: '#E5E5E5' }}
-                                >
-                                  <div className="text-xs mb-1" style={{ color: '#7B8B4F' }}>
-                                    {index + 1}위
+            {/* ========== 월간 탭 ========== */}
+            {selectedPeriod === 'month' && (
+              <>
+                {/* 1️⃣ 일기 기록 현황 (월간) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <BookOpen className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      일기 기록 현황
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingMonthly ? (
+                      <Skeleton className="h-16 w-full" />
+                    ) : (
+                      <div className="flex items-center gap-4 py-2">
+                        <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
+                          {monthlyDiaryStats?.monthlyCount || 0}
+                        </p>
+                        <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                          개의 일기를 작성했어요
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 2️⃣ 감정별 챌린지 수행 현황 (월간) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Activity className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      감정별 챌린지 수행 현황
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingMonthly ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {monthlyChallengePerformance && Object.entries(monthlyChallengePerformance).length > 0 ? (
+                          Object.entries(monthlyChallengePerformance).map(([emotion, stats]) => {
+                            const percentage = stats.total > 0 ? (stats.completed / stats.total) * 100 : 0;
+                            const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
+                            const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+
+                            return (
+                              <div key={emotion} className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    {EmotionIcon && (
+                                      <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
+                                    )}
+                                    <span className="text-sm">
+                                      {emotionNames[emotion as keyof typeof emotionNames]}
+                                    </span>
                                   </div>
-                                  <div className="text-sm mb-1" style={{ color: '#4A3228' }}>
-                                    {keyword}
-                                  </div>
+                                  <span className="text-sm font-medium">
+                                    {stats.completed}/{stats.total}개
+                                  </span>
                                 </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-4 text-sm text-gray-500 col-span-3">
-                                데이터가 없어요.
+
+                                <div
+                                  className="h-1.5 rounded-full overflow-hidden ml-7"
+                                  style={{
+                                    backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      width: `${percentage}%`,
+                                      height: "100%",
+                                      backgroundColor: "#7B8B4F",
+                                      transition: "width 0.3s ease",
+                                    }}
+                                  />
+                                </div>
                               </div>
-                            )}
+                            );
+                          })
+                        ) : (
+                          <div className="text-center py-4 text-sm text-gray-500">
+                            데이터가 없어요.
                           </div>
-                        </div>
-                      );
-                    })}
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                {/* 3️⃣ 음악 추천 통계 (월간) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Headphones className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      음악 추천 통계
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingMonthly ? (
+                      <Skeleton className="h-32 w-full" />
+                    ) : !monthlyMusicStats ? (
+                      <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
+                    ) : (
+                      <div className="space-y-4">
 
-            {/* 5️⃣ 키워드 감정 탐구 (누적) */}
-            <Card className="bg-card/90 backdrop-blur-sm border-border">
-              <CardHeader>
-                <CardTitle className="flex items-center text-foreground">
-                  <BarChart3 className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  키워드 감정 탐구
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingTotal ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-20 w-full" />)}
-                  </div>
-                ) : !totalKeywordMapping || totalKeywordMapping.length === 0 ? (
-                  <div className="text-center py-4 text-sm text-muted-foreground">
-                    데이터가 없어요.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <p className="text-sm mb-3 text-muted-foreground">
-                      키워드별 감정 기록 통계
-                    </p>
-                    {totalKeywordMapping.map((item, index) => {
-                      const totalCount = Object.values(item.emotions ?? {}).reduce((a, b) => a + b, 0);
+                        {/* ===============================
+                            1) topGenre 계산
+                        =============================== */}
+                        {(() => {
+                          let topGenre = "-";
+                          let topCount = -1;
 
-                      return (
-                        <div key={index} className="bg-card rounded-lg p-3 border border-border">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-foreground">{item.keyword}</span>
-                            <span className="text-sm text-muted-foreground">총 {totalCount}회</span>
-                          </div>
+                          const mappings = monthlyMusicStats.emotionGenreMapping ?? {};
 
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {Object.entries(item.emotions ?? {}).map(([emoKo, count]) => {
-                              const emotion = emotionMap[emoKo]; 
-                              if (!emotion) return null; // 잘못된 감정값이면 건너뛰기
+                          // 감정별 → 장르별 → 수치 비교
+                          Object.values(mappings).forEach((genres) => {
+                            Object.entries(genres).forEach(([genre, count]) => {
+                              if (count > topCount) {
+                                topCount = count;
+                                topGenre = genre;
+                              }
+                            });
+                          });
 
+                          return (
+                            <div className="bg-gradient-to-r from-[#7B8B4F]/10 to-[#7B8B4F]/5 rounded-lg p-4 text-center">
+                              <p className="text-sm mb-1" style={{ color: '#4A3228', opacity: 0.7 }}>
+                                가장 많이 추천된 장르
+                              </p>
+                              <p className="text-xl font-semibold" style={{ color: '#7B8B4F' }}>
+                                {topGenre} 🎷
+                              </p>
+                            </div>
+                          );
+                        })()}
+
+                        {/* ===============================
+                            2) 감정별 상세 breakdown
+                        =============================== */}
+                        <div className="space-y-4">
+                          <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                            감정별 추천 상세 내역
+                          </p>
+
+                          {monthlyMusicStats.emotionGenreMapping &&
+                            Object.entries(monthlyMusicStats.emotionGenreMapping).length > 0 ? (
+                            Object.entries(monthlyMusicStats.emotionGenreMapping).map(([emotionKo, genres]) => {
+                              const emotion =
+                                emotionKo === '기쁨' ? 'JOY' :
+                                emotionKo === '슬픔' ? 'SADNESS' :
+                                emotionKo === '분노' ? 'ANGER' :
+                                emotionKo === '화남' ? 'ANGER' :
+                                emotionKo === '무기력' ? 'APATHY' :
+                                emotionKo === '예민' ? 'SENSITIVE' : 'APATHY';
+
+                              const totalCount = Object.values(genres).reduce((a, b) => a + b, 0);
                               const EmotionIcon = emotionIcons[emotion];
                               const colorClass = emotionColorClasses[emotion];
 
                               return (
-                                <div
-                                  key={`${item.keyword}-${emotion}`}   // ← 키 중복 완전 방지
-                                  className={`flex items-center gap-1 px-2 py-1 rounded ${colorClass.bg}`}
-                                >
-                                  {EmotionIcon && <EmotionIcon className={`w-3 h-3 ${colorClass.text}`} />}
-                                  <span className={`text-xs ${colorClass.text}`}>{count}</span>
+                                <div key={emotion} className="p-3 border rounded-lg bg-white/60">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    {EmotionIcon && (
+                                      <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
+                                    )}
+                                    <span className="text-sm font-medium">
+                                      {emotionKo} ({totalCount}곡)
+                                    </span>
+                                  </div>
+
+                                  <div className="pl-2 space-y-1">
+                                    {Object.entries(genres).map(([genre, count]) => (
+                                      <div key={genre} className="flex items-center justify-between text-sm">
+                                        <span>{genre}</span>
+                                        <span style={{ color: '#7B8B4F' }}>{count}곡</span>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               );
-                            })}
-                          </div>
+                            })
+                          ) : (
+                            <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* 6️⃣ 월간 질문 */}
-            <Card className="bg-white/70 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <MessageCircleQuestion className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
-                  월간 질문
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm mb-4" style={{ color: '#4A3228', opacity: 0.7 }}>
-                  매일의 질문에 답하고 월간 패턴을 확인해보세요.
-                </p>
-                <Button 
-                  className="w-full"
-                  style={{ backgroundColor: '#7B8B4F', color: 'white' }}
-                  onClick={() => setShowMonthlyAnswers(true)}
-                >
-                  월간 답변 보기
-                </Button>
-              </CardContent>
-            </Card>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 4️⃣ 키워드 랭킹 (월간) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Hash className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      키워드 랭킹
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingMonthly ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => <Skeleton key={i} className="h-8 w-full" />)}
+                      </div>
+                    ) : monthlyKeywords.length === 0 ? (
+                      <div className="text-center py-4 text-sm text-gray-500">
+                        데이터가 없어요.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {monthlyKeywords.map((keyword, index) => {
+                          const maxCount = monthlyKeywords[0]?.count || 1;
+                          const percentage = (keyword.count / maxCount) * 70;
+
+                          return (
+                            <div key={index} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <span
+                                    className="text-xs font-medium"
+                                    style={{
+                                      color: 'var(--primary)',
+                                      minWidth: '20px',
+                                    }}
+                                  >
+                                    {index + 1}
+                                  </span>
+
+                                  <span className="text-sm">{keyword.keyword}</span>
+                                </div>
+
+                                <span
+                                  className="text-sm font-medium"
+                                  style={{ color: 'var(--primary)' }}
+                                >
+                                  {keyword.count}회
+                                </span>
+                              </div>
+
+                              <div
+                                className="h-2 rounded-full overflow-hidden"
+                                style={{
+                                  backgroundColor: "#E8EAD9",  
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${percentage}%`,
+                                    height: "100%",
+                                    backgroundColor: "#7B8B4F",
+                                    transition: "width 0.3s ease",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* ========== 누적 탭 ========== */}
+            {selectedPeriod === 'total' && (
+              <>
+                {/* 1️⃣ 일기 총 작성 수 (누적) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <BookOpen className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      일기 총 작성 수
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingTotal ? (
+                      <Skeleton className="h-16 w-full" />
+                    ) : (
+                      <div className="flex items-center gap-4 py-2">
+                        <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
+                          {totalDiaryCount}
+                        </p>
+                        <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                          개의 이야기가 쌓였어요
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 2️⃣ 감정 분포 비율 (누적) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Sparkles className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      감정 분포 비율
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingTotal ? (
+                      <div className="space-y-3">
+                        {[1, 2, 3, 4, 5].map(i => (
+                          <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                      </div>
+                    ) : !totalEmotionDistribution || Object.keys(totalEmotionDistribution ?? {}).length === 0 ? (
+                      <div className="text-center py-4 text-sm text-gray-500">
+                        데이터가 없어요.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {Object.entries(totalEmotionDistribution ?? {}).map(([emoKo, count]) => {
+                          const emotion =
+                            emoKo === '기쁨' ? 'JOY' :
+                            emoKo === '슬픔' ? 'SADNESS' :
+                            emoKo === '분노' ? 'ANGER' :
+                            emoKo === '화남' ? 'ANGER' :
+                            emoKo === '무기력' ? 'APATHY' :
+                            emoKo === '예민' ? 'SENSITIVE' :
+                            'APATHY';
+
+                          const total = Object.values(totalEmotionDistribution ?? {}).reduce((a, b) => a + b, 0);
+                          const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+                          const EmotionIcon = emotionIcons[emotion];
+                          const colorClass = emotionColorClasses[emotion];
+
+                          return (
+                            <div key={emotion} className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  {EmotionIcon && <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />}
+                                  <span className="text-sm">
+                                    {emotionNames[emotion]}
+                                  </span>
+                                </div>
+                                <span className="text-sm font-medium">{percentage}%</span>
+                              </div>
+                              <Progress value={percentage} className="h-2" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 3️⃣ 획득한 뱃지 (누적) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Award className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      획득한 뱃지
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingTotal ? (
+                      <Skeleton className="h-16 w-full" />
+                    ) : (
+                      <div className="flex items-center gap-4 py-2">
+                        <p className="text-5xl font-bold" style={{ color: '#7B8B4F' }}>
+                          {totalBadgeCount}
+                        </p>
+                        <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
+                          개의 뱃지를 획득했어요
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 4️⃣ 기분 랭킹 (누적) */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Trophy className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      기분 랭킹
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingTotal ? (
+                      <Skeleton className="h-48 w-full" />
+                    ) : !moodRanking || !moodRanking.emotionToKeywords ? (
+                      <div className="text-center py-4 text-sm text-gray-500">데이터가 없어요.</div>
+                    ) : (
+                      <div className="space-y-6">
+
+                        {Object.entries(moodRanking.emotionToKeywords).map(([emotion, keywords]) => {
+                          const EmotionIcon = emotionIcons[emotion as keyof typeof emotionIcons];
+                          const emotionName = emotionNames[emotion as keyof typeof emotionNames];
+                          const colorClass = emotionColorClasses[emotion as keyof typeof emotionColorClasses];
+
+                          return (
+                            <div key={emotion}>
+                              <div className="flex items-center gap-2 mb-3">
+                                {EmotionIcon && (
+                                  <EmotionIcon className="w-4 h-4" style={{ color: colorClass.bar }} />
+                                )}
+                                <p className="text-sm" style={{ color: '#7B8B4F' }}>
+                                  {emotionName}를 느낄 때 자주 등장한 키워드
+                                </p>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-2">
+                                {keywords.length > 0 ? (
+                                  keywords.map((keyword, index) => (
+                                    <div
+                                      key={index}
+                                      className="bg-gradient-to-br from-[#7B8B4F]/5 to-[#7B8B4F]/10 rounded-lg p-3 text-center border"
+                                      style={{ borderColor: '#E5E5E5' }}
+                                    >
+                                      <div className="text-xs mb-1" style={{ color: '#7B8B4F' }}>
+                                        {index + 1}위
+                                      </div>
+                                      <div className="text-sm mb-1" style={{ color: '#4A3228' }}>
+                                        {keyword}
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-center py-4 text-sm text-gray-500 col-span-3">
+                                    데이터가 없어요.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 5️⃣ 키워드 감정 탐구 (누적) */}
+                <Card className="bg-card/90 backdrop-blur-sm border-border">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-foreground">
+                      <BarChart3 className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      키워드 감정 탐구
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingTotal ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+                      </div>
+                    ) : !totalKeywordMapping || totalKeywordMapping.length === 0 ? (
+                      <div className="text-center py-4 text-sm text-muted-foreground">
+                        데이터가 없어요.
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <p className="text-sm mb-3 text-muted-foreground">
+                          키워드별 감정 기록 통계
+                        </p>
+                        {totalKeywordMapping.map((item, index) => {
+                          const totalCount = Object.values(item.emotions ?? {}).reduce((a, b) => a + b, 0);
+
+                          return (
+                            <div key={index} className="bg-card rounded-lg p-3 border border-border">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium text-foreground">{item.keyword}</span>
+                                <span className="text-sm text-muted-foreground">총 {totalCount}회</span>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {Object.entries(item.emotions ?? {}).map(([emoKo, count]) => {
+                                  const emotion = emotionMap[emoKo]; 
+                                  if (!emotion) return null; // 잘못된 감정값이면 건너뛰기
+
+                                  const EmotionIcon = emotionIcons[emotion];
+                                  const colorClass = emotionColorClasses[emotion];
+
+                                  return (
+                                    <div
+                                      key={`${item.keyword}-${emotion}`}   // ← 키 중복 완전 방지
+                                      className={`flex items-center gap-1 px-2 py-1 rounded ${colorClass.bg}`}
+                                    >
+                                      {EmotionIcon && <EmotionIcon className={`w-3 h-3 ${colorClass.text}`} />}
+                                      <span className={`text-xs ${colorClass.text}`}>{count}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 6️⃣ 월간 질문 */}
+                <Card className="bg-white/70 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <MessageCircleQuestion className="w-5 h-5 mr-2" style={{ color: '#7B8B4F' }} />
+                      월간 질문
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-4" style={{ color: '#4A3228', opacity: 0.7 }}>
+                      매일의 질문에 답하고 월간 패턴을 확인해보세요.
+                    </p>
+                    <Button 
+                      className="w-full"
+                      style={{ backgroundColor: '#7B8B4F', color: 'white' }}
+                      onClick={() => setShowMonthlyAnswers(true)}
+                    >
+                      월간 답변 보기
+                    </Button>
+                  </CardContent>
+                </Card>
+                </>
+              )}
             </>
           )}
         </>
