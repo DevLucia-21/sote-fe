@@ -125,27 +125,26 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
   const days = getAvailableDays();
 
-  // const isFirstRender = React.useRef(true);
-  // useEffect(() => {
-  //   if (isFirstRender.current) {
-  //     isFirstRender.current = false;
-  //     return;
-  //   }
+  const isFirstRender = React.useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
 
-  //   if (
-  //     !selectedYear ||
-  //     !selectedMonth ||
-  //     !selectedDay ||
-  //     typeof selectedYear !== "string" ||
-  //     typeof selectedMonth !== "string" ||
-  //     typeof selectedDay !== "string"
-  //   ) {
-  //     return;
-  //   }
+    if (
+      !selectedYear ||
+      !selectedMonth ||
+      !selectedDay ||
+      typeof selectedYear !== "string" ||
+      typeof selectedMonth !== "string" ||
+      typeof selectedDay !== "string"
+    ) {
+      return;
+    }
 
-  //   checkDiaryExists(selectedYear, selectedMonth, selectedDay);
-  // }, [selectedYear, selectedMonth, selectedDay]);
-  useEffect(() => {}, [selectedYear, selectedMonth, selectedDay]);
+    checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+  }, [selectedYear, selectedMonth, selectedDay]);
 
   // 오늘의 질문 가져오기
   useEffect(() => {
@@ -181,11 +180,11 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
 
   const handleStartWriting = async () => {
-    // const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+    const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
 
-    // if (exists) {
-    //   return;
-    // }
+    if (exists) {
+      return;
+    }
 
     if (!selectedYear || !selectedMonth || !selectedDay) {
       toast.error('날짜를 선택해주세요.');
@@ -240,9 +239,8 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
       setPendingAnalysisPayload({
         diaryId: savedDiaryId,
-        content: diary.content,
+        text: diary.content,
         date: selectedDateStr,
-        keywordIds: payload.keywordIds
       });
 
       setAnalysisState("analyzing");
