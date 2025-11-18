@@ -28,6 +28,9 @@ export function NoteHead({ note, emotion, score, contentLength, onClick, size }:
   }, []);
   
   const position = notePositions[note];
+  if (!position || !position.yOffset) {
+    return null;   // note 없음 → 그리지 않음
+  }
   
   // 이지모드 확인 (size가 40 또는 50이면 이지모드로 간주)
   const isEasyMode = size === 40 || size === 50;
