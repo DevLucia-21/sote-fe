@@ -467,15 +467,13 @@ export function StatisticsView() {
         const music = await api.get("/api/statistics/music", {
           params: {
             period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
+            month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`,
           }
         });
         const keywordRank = await api.get("/api/statistics/keywords/ranking", {
           params: {
             period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
+            month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`,
           }
         });
         setMonthlyDiaryStats(diary.data);
