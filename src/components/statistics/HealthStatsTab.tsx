@@ -249,7 +249,7 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
               <button
                 key={v}
                 onClick={() => addWater(v)}  // ⚡ 즉시 증가량 API 호출
-                className="py-2 rounded-lg bg-[#4A9EC4] text-white font-semibold active:scale-95 transition"
+                className="py-2 rounded-lg bg-gray-100 text-gray-700 font-semibold active:scale-95 transition"
               >
                 +{v}ml
               </button>
@@ -297,7 +297,7 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
               <button
                 key={v}
                 onClick={() => addCaffeine(v)}  // ⚡ 즉시 증가량 추가
-                className="py-2 rounded-lg bg-[#7B3E2E] text-white font-semibold active:scale-95 transition"
+                className="py-2 rounded-lg bg-gray-100 text-gray-700 font-semibold active:scale-95 transition"
               >
                 +{v}mg
               </button>
