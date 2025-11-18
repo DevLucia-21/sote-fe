@@ -22,6 +22,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Skeleton } from '../ui/skeleton';
 import { Activity, Watch, AlertCircle } from 'lucide-react';
+import { WatchPairingView } from '../settings/WatchPairingView';
 
 // ========== Types ==========
 
@@ -35,10 +36,6 @@ interface StressStatsItem {
   date: string;
   averageHrv: number;
   stressLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-}
-
-interface WatchStressCardProps {
-  onNavigateToPairing?: () => void;
 }
 
 type Period = '7' | '30';
@@ -75,7 +72,7 @@ const getStressLevelFromHrv = (hrv: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
 
 // ========== Component ==========
 
-export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
+export function WatchStressCard() {
   const [period, setPeriod] = useState<Period>('7');
   // Set to null initially for loading state, true for connected, false for not connected
   // To test empty state: change initial value to false
@@ -85,6 +82,12 @@ export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
   
   const [todayData, setTodayData] = useState<StressTodayResponse | null>(null);
   const [statsData, setStatsData] = useState<StressStatsItem[]>([]);
+
+  const [localView, setLocalView] = useState<'main' | 'pairing'>('main');
+  
+  if (localView === 'pairing') {
+    return <WatchPairingView onBack={() => setLocalView('main')} />;
+  }
 
   // ========== Fetch Data ==========
 
@@ -168,7 +171,7 @@ export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
             </p>
             <Button 
               variant="outline"
-              onClick={() => onNavigateToPairing && onNavigateToPairing()}
+              onClick={() => setLocalView('pairing')}
               style={{ borderColor: '#7B8B4F', color: '#7B8B4F' }}
             >
               연동하기
