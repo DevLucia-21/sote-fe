@@ -650,7 +650,6 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         </Button>
       </div>
 
-      {/* 전시 버전: 중복 모달 제거
       {showDiaryExistsModal && (
         <div
           className="error-modal-overlay"
@@ -732,7 +731,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           </div>
         </div>
       )}
-      */}
+     
     </div>
   );
 }
