@@ -250,6 +250,7 @@ export function StatisticsView() {
   // 건강 데이터 연동 여부 확인
   const isHealthConnected = 'true';
   // const isHealthConnected = localStorage.getItem('healthDataConnected') === 'true';
+  const [showPairingView, setShowPairingView] = useState(false);
 
   const characterToInstrument: Record<string, string> = {
     "PIANO": "piano",
@@ -687,7 +688,14 @@ export function StatisticsView() {
 
       {/* 건강 탭이 선택되면 건강 통계만 표시 */}
       {selectedTab === 'health' ? (
-        <HealthStatsTab isConnected={isHealthConnected} />
+        showPairingView ? (
+          <WatchPairingView onBack={() => setShowPairingView(false)} />
+        ) : (
+          <HealthStatsTab 
+            isConnected={isHealthConnected} 
+            onNavigateToPairing={() => setShowPairingView(true)} 
+          />
+        )
       ) : (
         <>
       {/* 날짜 네비게이션 */}
