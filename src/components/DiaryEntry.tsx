@@ -180,11 +180,11 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
 
   const handleStartWriting = async () => {
-    const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+    // const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
 
-    if (exists) {
-      return;
-    }
+    // if (exists) {
+    //   return;
+    // }
 
     if (!selectedYear || !selectedMonth || !selectedDay) {
       toast.error('날짜를 선택해주세요.');
@@ -650,6 +650,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         </Button>
       </div>
 
+      {/* 전시 버전: 중복 모달 제거
       {showDiaryExistsModal && (
         <div
           className="error-modal-overlay"
@@ -731,7 +732,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           </div>
         </div>
       )}
-     
+      */}
     </div>
   );
 }
