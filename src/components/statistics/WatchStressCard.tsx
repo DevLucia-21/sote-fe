@@ -76,7 +76,7 @@ const getStressLevelFromHrv = (hrv: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
 
 // ========== Component ==========
 
-export function WatchStressCard({ onNavigateToPairing }: { onNavigateToPairing?: () => void }) {
+export function WatchStressCard({ onNavigateToPairing }: WatchStressCardProps) {
   console.log("🔥 WatchStressCard props =", { onNavigateToPairing });
   const [period, setPeriod] = useState<Period>('7');
   // Set to null initially for loading state, true for connected, false for not connected
