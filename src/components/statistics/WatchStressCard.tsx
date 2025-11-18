@@ -75,7 +75,8 @@ const getStressLevelFromHrv = (hrv: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
 
 // ========== Component ==========
 
-export function WatchStressCard({ onNavigateToPairing = undefined }: WatchStressCardProps = {}) {
+export function WatchStressCard(props: WatchStressCardProps) {
+  const { onNavigateToPairing } = props ?? {};
   console.log("🔥 WatchStressCard props =", { onNavigateToPairing });
   const [period, setPeriod] = useState<Period>('7');
   // Set to null initially for loading state, true for connected, false for not connected
@@ -134,7 +135,7 @@ export function WatchStressCard({ onNavigateToPairing = undefined }: WatchStress
     if (isConnected !== false) {
       fetchData();
     }
-  }, [isConnected]); // period 제거
+  }, []); // period 제거
 
   // ========== Calculations ==========
 
