@@ -125,26 +125,27 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
   const days = getAvailableDays();
 
-  const isFirstRender = React.useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+  // const isFirstRender = React.useRef(true);
+  // useEffect(() => {
+  //   if (isFirstRender.current) {
+  //     isFirstRender.current = false;
+  //     return;
+  //   }
 
-    if (
-      !selectedYear ||
-      !selectedMonth ||
-      !selectedDay ||
-      typeof selectedYear !== "string" ||
-      typeof selectedMonth !== "string" ||
-      typeof selectedDay !== "string"
-    ) {
-      return;
-    }
+  //   if (
+  //     !selectedYear ||
+  //     !selectedMonth ||
+  //     !selectedDay ||
+  //     typeof selectedYear !== "string" ||
+  //     typeof selectedMonth !== "string" ||
+  //     typeof selectedDay !== "string"
+  //   ) {
+  //     return;
+  //   }
 
-    checkDiaryExists(selectedYear, selectedMonth, selectedDay);
-  }, [selectedYear, selectedMonth, selectedDay]);
+  //   checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+  // }, [selectedYear, selectedMonth, selectedDay]);
+  useEffect(() => {}, [selectedYear, selectedMonth, selectedDay]);
 
   // 오늘의 질문 가져오기
   useEffect(() => {
@@ -180,11 +181,11 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
 
   const handleStartWriting = async () => {
-    const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+    // const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
 
-    if (exists) {
-      return;
-    }
+    // if (exists) {
+    //   return;
+    // }
 
     if (!selectedYear || !selectedMonth || !selectedDay) {
       toast.error('날짜를 선택해주세요.');
@@ -239,8 +240,9 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
       setPendingAnalysisPayload({
         diaryId: savedDiaryId,
-        text: diary.content,
+        content: diary.content,
         date: selectedDateStr,
+        keywordIds: payload.keywordIds
       });
 
       setAnalysisState("analyzing");
@@ -358,7 +360,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
             console.log("📍 genreIds =", analysisRequest.genreIds);
 
             setPendingAnalysisPayload({
-              diaryId: analysisRequest.diaryId,
+              diaryId: null, // 전시는 저장 안 함
               content: analysisRequest.text,
               date: selectedDateStr,
               keywordIds: analysisRequest.genreIds,
@@ -650,6 +652,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         </Button>
       </div>
 
+      {/* 전시 버전: 중복 모달 제거
       {showDiaryExistsModal && (
         <div
           className="error-modal-overlay"
@@ -731,6 +734,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           </div>
         </div>
       )}
+      */}
     </div>
   );
 }
