@@ -24,22 +24,22 @@ export function EasyDiaryEntry() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  useEffect(() => {
-    const checkTodayDiary = async () => {
-      try {
-        const res = await api.get('/api/diaries', { params: { date: todayStr } });
-        const todayDiary = res.data;
+  // useEffect(() => {
+  //   const checkTodayDiary = async () => {
+  //     try {
+  //       const res = await api.get('/api/diaries', { params: { date: todayStr } });
+  //       const todayDiary = res.data;
 
-        if (todayDiary) {
-          setShowWarningModal(true);
-        }
-      } catch (err) {
-        console.error("오늘 일기 조회 실패:", err);
-      }
-    };
+  //       if (todayDiary) {
+  //         setShowWarningModal(true);
+  //       }
+  //     } catch (err) {
+  //       console.error("오늘 일기 조회 실패:", err);
+  //     }
+  //   };
 
-    checkTodayDiary();
-  }, [todayStr]);
+  //   checkTodayDiary();
+  // }, [todayStr]);
 
   const handleSubmit = async () => {
     if (!content.trim()) {

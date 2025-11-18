@@ -125,26 +125,27 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
   const days = getAvailableDays();
 
-  const isFirstRender = React.useRef(true);
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+  // const isFirstRender = React.useRef(true);
+  // useEffect(() => {
+  //   if (isFirstRender.current) {
+  //     isFirstRender.current = false;
+  //     return;
+  //   }
 
-    if (
-      !selectedYear ||
-      !selectedMonth ||
-      !selectedDay ||
-      typeof selectedYear !== "string" ||
-      typeof selectedMonth !== "string" ||
-      typeof selectedDay !== "string"
-    ) {
-      return;
-    }
+  //   if (
+  //     !selectedYear ||
+  //     !selectedMonth ||
+  //     !selectedDay ||
+  //     typeof selectedYear !== "string" ||
+  //     typeof selectedMonth !== "string" ||
+  //     typeof selectedDay !== "string"
+  //   ) {
+  //     return;
+  //   }
 
-    checkDiaryExists(selectedYear, selectedMonth, selectedDay);
-  }, [selectedYear, selectedMonth, selectedDay]);
+  //   checkDiaryExists(selectedYear, selectedMonth, selectedDay);
+  // }, [selectedYear, selectedMonth, selectedDay]);
+  useEffect(() => {}, [selectedYear, selectedMonth, selectedDay]);
 
   // 오늘의 질문 가져오기
   useEffect(() => {
@@ -650,6 +651,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         </Button>
       </div>
 
+      {/* 전시 버전: 중복 모달 제거
       {showDiaryExistsModal && (
         <div
           className="error-modal-overlay"
@@ -731,7 +733,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
           </div>
         </div>
       )}
-     
+      */}
     </div>
   );
 }
