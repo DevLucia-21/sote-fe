@@ -133,7 +133,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   //   }
 
   //   if (
-  //     !selectedYear ||
+  //     !selectedYear || 
   //     !selectedMonth ||
   //     !selectedDay ||
   //     typeof selectedYear !== "string" ||

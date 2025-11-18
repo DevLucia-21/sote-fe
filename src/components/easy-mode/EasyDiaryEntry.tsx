@@ -24,7 +24,7 @@ export function EasyDiaryEntry() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // useEffect(() => {
+  // useEffect(() => { 
   //   const checkTodayDiary = async () => {
   //     try {
   //       const res = await api.get('/api/diaries', { params: { date: todayStr } });
