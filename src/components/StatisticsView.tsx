@@ -163,6 +163,7 @@ const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSI
   '기쁨': 'JOY',
   '슬픔': 'SADNESS',
   '분노': 'ANGER',
+  '화남': 'ANGER',
   '예민': 'SENSITIVE',
   '무기력': 'APATHY',
 
@@ -269,6 +270,7 @@ export function StatisticsView() {
     '기쁨': 'JOY',
     '슬픔': 'SADNESS',
     '분노': 'ANGER',
+    '화남': 'ANGER',
     '무기력': 'APATHY',
     '예민': 'SENSITIVE',
   };
@@ -1170,6 +1172,7 @@ export function StatisticsView() {
                           emotionKo === '기쁨' ? 'JOY' :
                           emotionKo === '슬픔' ? 'SADNESS' :
                           emotionKo === '분노' ? 'ANGER' :
+                          emotionKo === '화남' ? 'ANGER' :
                           emotionKo === '무기력' ? 'APATHY' :
                           emotionKo === '예민' ? 'SENSITIVE' : 'APATHY';
 
@@ -1335,6 +1338,7 @@ export function StatisticsView() {
                       emoKo === '기쁨' ? 'JOY' :
                       emoKo === '슬픔' ? 'SADNESS' :
                       emoKo === '분노' ? 'ANGER' :
+                      emoKo === '화남' ? 'ANGER' :
                       emoKo === '무기력' ? 'APATHY' :
                       emoKo === '예민' ? 'SENSITIVE' :
                       'APATHY';

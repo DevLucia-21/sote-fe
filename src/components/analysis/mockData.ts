@@ -84,6 +84,20 @@ export const musicRecommendations: Record<EmotionType, MusicRecommendation[]> = 
       reason: '격렬한 사운드가 분노를 승화시키는 데 도움을 줄 거예요.',
     },
   ],
+  화남: [
+    {
+      title: 'Release',
+      artist: 'Thunder Beats',
+      genre: 'Rock',
+      reason: '강렬한 비트와 에너지로 감정을 건강하게 표출할 수 있어요.',
+    },
+    {
+      title: 'Storm',
+      artist: 'Electric Souls',
+      genre: 'Alternative Rock',
+      reason: '격렬한 사운드가 분노를 승화시키는 데 도움을 줄 거예요.',
+    },
+  ],
   무기력: [
     {
       title: 'Gentle Wake',
@@ -164,6 +178,22 @@ export const challengeRecommendations: Record<EmotionType, ChallengeRecommendati
       emotion: '분노',
     },
   ],
+  화남: [
+    {
+      id: 'anger-1',
+      category: '명상',
+      title: '심호흡 명상',
+      description: '5분간 깊은 호흡으로 감정을 차분하게 가라앉혀보세요.',
+      emotion: '분노',
+    },
+    {
+      id: 'anger-2',
+      category: '운동',
+      title: '신체 활동하기',
+      description: '산책이나 운동으로 분노를 건강하게 해소해보세요.',
+      emotion: '분노',
+    },
+  ],
   무기력: [
     {
       id: 'lethargy-1',
@@ -224,6 +254,10 @@ export const emotionReasons: Record<EmotionType, string[]> = {
     '화난 감정을 짧고 강하게 표현하셨어요.',
     '억울한 일로 인한 분노가 하루 종일 이어졌네요.',
   ],
+  화남: [
+    '화난 감정을 짧고 강하게 표현하셨어요.',
+    '억울한 일로 인한 분노가 하루 종일 이어졌네요.',
+  ],
   무기력: [
     '무기력한 상태를 짧게 표현하셨네요.',
     '아무것도 하고 싶지 않았던 에너지 없는 하루였어요.',
@@ -238,6 +272,7 @@ export const emotionDescriptions: Record<EmotionType, string> = {
   기쁨: '당신의 하루는 기쁨의 멜로디로 채워져 있었어요.',
   슬픔: '당신의 하루는 잔잔한 슬픔의 선율을 담고 있어요.',
   분노: '당신의 하루는 강렬한 감정의 리듬을 품고 있어요.',
+  화남: '당신의 하루는 강렬한 감정의 리듬을 품고 있어요.',
   무기력: '당신의 하루는 조용히 쉬어가는 휴지부 같아요.',
   예민: '당신의 하루는 섬세한 감각의 화음을 담고 있어요.',
 };

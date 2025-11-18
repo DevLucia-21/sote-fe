@@ -7,6 +7,7 @@ const emotionKeywordColors: Record<string, string> = {
   '기쁨': '#F5C842',
   '슬픔': '#5B94CC',
   '분노': '#E04B4B',
+  '화남': '#E04B4B',
   '무기력': '#8A8A8A',
   '예민': '#9B76CC',
 };

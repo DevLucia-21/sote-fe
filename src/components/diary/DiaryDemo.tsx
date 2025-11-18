@@ -22,7 +22,7 @@ export function DiaryDemo({ onBack }: DiaryDemoProps) {
     return <DiaryManager onBack={() => setShowFullApp(false)} />;
   }
 
-  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '예민', '무기력'];
+  const emotions: EmotionType[] = ['기쁨', '슬픔', '분노', '화남', '예민', '무기력'];
   const writeTypes: WriteType[] = ['TEXT', 'STT', 'OCR'];
 
   return (
