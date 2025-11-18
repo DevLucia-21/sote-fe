@@ -384,12 +384,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
       sttId: Number(sttId),
     });
-    
-    if (!sttId) {
-      console.log("❌ [DEBUG] sttId 없음 -> 저장 중단");
-      toast.error("STT ID가 없어 저장할 수 없어요.");
-      return;
-    }
 
     if (!transcribedText.trim()) {
       toast.error('변환된 텍스트가 없습니다.');
