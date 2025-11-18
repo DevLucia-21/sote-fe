@@ -13,6 +13,7 @@ import api from '../../services/api';
 
 interface HealthStatsTabProps {
   isConnected?: boolean;
+  onNavigateToPairing?: () => void;
 }
 
 interface DailyHealthSummary {
@@ -155,7 +156,7 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
     <div className="space-y-4">
 
       {/* 스트레스 데이터 */}
-      <WatchStressCard />
+      <WatchStressCard onNavigateToPairing={onNavigateToPairing} />
 
       {/* 심박수 */}
       <Card className="bg-white/70 backdrop-blur-sm border-border">
