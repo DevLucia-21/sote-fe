@@ -20,6 +20,12 @@ export const emotionStyles: Record<EmotionType, EmotionStyle> = {
     textColor: '#5D2828',
     characterMood: 'angry',
   },
+  화남: {
+    backgroundColor: '#F8C4C4',
+    accentColor: '#E04B4B',
+    textColor: '#5D2828',
+    characterMood: 'angry',
+  },
   무기력: {
     backgroundColor: '#E6E6E6',
     accentColor: '#8A8A8A',
