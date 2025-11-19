@@ -123,35 +123,29 @@ export function HealthStatsTab() {
   return (
     <div className="space-y-6">
 
-      {/* ============================== */}
       {/* ⭐ 워치 연동 토글 */}
-      {/* ============================== */}
       <Card className="bg-white/70 p-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Activity className="w-6 h-6" style={{ color: "#7B8B4F" }} />
           <span className="font-semibold">워치 연동</span>
         </div>
 
-        <label className="flex items-center cursor-pointer">
-          <div className="relative">
-            <input
-              type="checkbox"
-              checked={connected}
-              onChange={() => setConnected(!connected)}
-              className="sr-only"
-            />
-            <div className={`w-12 h-6 rounded-full transition ${
-              connected ? "bg-green-500" : "bg-gray-300"
-            }`} />
-            <div
-              className={`dot absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition ${
-                connected ? "translate-x-6" : ""
-              }`}
-            ></div>
-          </div>
-        </label>
+        {/* 토글 */}
+        <button
+          onClick={() => setConnected(!connected)}
+          className={`
+            relative w-12 h-6 rounded-full transition-colors
+            ${connected ? "bg-green-500" : "bg-gray-300"}
+          `}
+        >
+          <span
+            className={`
+              absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform
+              ${connected ? "translate-x-6" : ""}
+            `}
+          />
+        </button>
       </Card>
-
 
       {/* ============================== */}
       {/* ⭐ 연결 Off → 메시지 */}
