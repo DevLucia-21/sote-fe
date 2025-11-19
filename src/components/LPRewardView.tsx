@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../services/api'
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Play, Pause, Disc3, Sparkles } from 'lucide-react';
+import { Play, Pause, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
 import { LPDisc } from './lp/LPDisc';
 
@@ -11,9 +11,18 @@ interface LPRewardViewProps {
   music: {
     title: string;
     artist: string;
+    album: string;
     albumImageUrl: string;
-    reason: string;
     playUrl?: string;
+
+    // 추가된 항목
+    emotionLabel?: string;
+    emotionReason?: string;
+    emotionScore?: number;
+    genre?: string;
+    selectedTrackReason?: string;
+    trackCover?: string;
+    reason: string;
   };
 }
 
@@ -25,6 +34,8 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
     const timer = setTimeout(() => setShowContent(true), 800);
     return () => clearTimeout(timer);
   }, []);
+
+  const albumImg = music.trackCover || music.albumImageUrl;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -53,6 +64,9 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
               <h2 className="text-2xl text-foreground">
                 새로운 LP를 획득했습니다!
               </h2>
+              <p className="text-sm text-muted-foreground">
+                {music.reason}
+              </p>
             </motion.div>
 
             {/* LP 디스크 */}
@@ -64,7 +78,7 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
             >
               <div className="relative">
                 <LPDisc
-                  albumImageUrl={music.albumImageUrl || null}
+                  albumImageUrl={albumImg}
                   title={music.title}
                   size="xl"
                   isPlaying={isPlaying}
@@ -98,7 +112,7 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: showContent ? 1 : 0 }}
               transition={{ delay: 0.7 }}
-              className="space-y-3 bg-muted/30 rounded-lg p-4 border border-border shadow-sm"
+              className="space-y-4 bg-muted/30 rounded-lg p-4 border border-border shadow-sm"
             >
               <div>
                 <p className="text-xs text-muted-foreground">제목</p>
@@ -109,6 +123,32 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
                 <p className="text-xs text-muted-foreground">아티스트</p>
                 <p className="font-medium text-foreground text-sm">{music.artist}</p>
               </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground">장르</p>
+                <p className="font-medium text-foreground text-sm">{music.genre}</p>
+              </div>
+
+              {music.emotionLabel && (
+                <div>
+                  <p className="text-xs text-muted-foreground">감정 분석</p>
+                  <p className="font-medium text-foreground text-sm">
+                    {music.emotionLabel} ({music.emotionScore}%)
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {music.emotionReason}
+                  </p>
+                </div>
+              )}
+
+              {music.selectedTrackReason && (
+                <div>
+                  <p className="text-xs text-muted-foreground">선정 이유</p>
+                  <p className="text-sm text-foreground">
+                    {music.selectedTrackReason}
+                  </p>
+                </div>
+              )}
             </motion.div>
 
             {/* 버튼 */}

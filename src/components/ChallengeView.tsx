@@ -69,17 +69,26 @@ export function ChallengeView() {
       setProgress(100);
       setIsCompleted(true);
 
-      const reward = res.data.reward;
-      if (reward) {
+      const rewardRes = await api.get(`/api/lp/today/detail`);
+
+      if (rewardRes && rewardRes.data) {
+        const { lp, emotionLabel, emotionReason, emotionScore, genre, selectedTrackReason, trackCover } = rewardRes.data;
+
         setMusicData({
-          title: reward.title,
-          artist: reward.artist,
-          albumImageUrl: reward.albumImageUrl,
+          title: lp.title,
+          artist: lp.artist,
+          album: lp.album,
+          albumImageUrl: lp.albumImageUrl ?? trackCover,  // 트랙커버 우선 사용하고 싶으면 로직 조정 가능
+          playUrl: lp.playUrl,
+          emotionLabel,
+          emotionReason,
+          emotionScore,
+          genre,
+          selectedTrackReason,
           reason: "오늘의 챌린지를 달성했어요! 🎉",
-          playUrl: reward.playUrl,
         });
       }
-
+      
       // 완료 후 LP 보상 화면으로 이동
       setCurrentView('lp-reward');
 
