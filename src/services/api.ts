@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError } from "axios";
 import { AuthStorage } from "../utils/auth";
 import type * as API from "../types/api";
 
-const BASE_URL = "https://sote-be.onrender.com";
+const BASE_URL = "http://localhost:8080";
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,

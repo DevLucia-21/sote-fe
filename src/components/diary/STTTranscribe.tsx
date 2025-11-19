@@ -329,7 +329,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       });
 
       const sttRes = await api.post("/ai/stt/transcribe", formData, {
-        baseURL: "https://sote-ai.onrender.com",
+        baseURL: "http://localhost:8080",
         headers: {
           "Content-Type": "multipart/form-data",
         },
