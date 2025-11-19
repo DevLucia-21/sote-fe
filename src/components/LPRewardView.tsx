@@ -133,7 +133,7 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
                 <div>
                   <p className="text-xs text-muted-foreground">감정 분석</p>
                   <p className="font-medium text-foreground text-sm">
-                    {music.emotionLabel} ({music.emotionScore}%)
+                    {music.emotionLabel} ({(music.emotionScore * 100).toFixed(1)}%)
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {music.emotionReason}
