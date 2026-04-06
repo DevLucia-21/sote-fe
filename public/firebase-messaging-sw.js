@@ -2,6 +2,10 @@
 importScripts("https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js");
 
+// NOTE:
+// 이 서비스워커는 public 정적 파일이라 Vite의 import.meta.env를 직접 사용할 수 없음.
+// Firebase 설정값 변경 시 src/firebase-config.ts와 함께 동일하게 수정해야 함.
+
 // Firebase Config
 firebase.initializeApp({
   apiKey: "AIzaSyAu_4_ANgwFOnTFyodDuDpUb6xQO_XEM9w",

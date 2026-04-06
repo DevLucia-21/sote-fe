@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError } from "axios";
 import { AuthStorage } from "../utils/auth";
 import type * as API from "../types/api";
 
-const BASE_URL = "http://localhost:8080";
+const BASE_URL = import.meta.env.local.VITE_API_BASE_URL;
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
