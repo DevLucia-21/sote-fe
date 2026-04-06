@@ -10,8 +10,8 @@ import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { ScrollArea, ScrollBar } from './ui/scroll-area';
 import { Music, ArrowLeft, Check, Eye, EyeOff, CalendarIcon, ChevronDown } from 'lucide-react';
-import type { CaptionProps } from 'react-day-picker@8.10.1';
-import { useNavigation } from 'react-day-picker@8.10.1';
+import type { CaptionProps } from 'react-day-picker';
+import { useNavigation } from 'react-day-picker';
 import { characterInfo, type CharacterType } from './common/characterImages';
 import { toast } from "sonner";
 
