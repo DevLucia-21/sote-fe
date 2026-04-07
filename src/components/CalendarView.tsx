@@ -130,37 +130,72 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     );
   };
 
+  const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
+    "기쁨": "JOY",
+    "슬픔": "SADNESS",
+    "분노": "ANGER",
+    "화남": "ANGER",
+    "무기력": "APATHY",
+    "예민": "SENSITIVE",
+    "JOY": "JOY",
+    "SADNESS": "SADNESS",
+    "ANGER": "ANGER",
+    "APATHY": "APATHY",
+    "SENSITIVE": "SENSITIVE",
+  };
+
+  const normalizeDiary = (diary: any, fallbackDate?: string) => {
+    const date = diary.date || diary.diaryDate || fallbackDate || '';
+
+    return {
+      ...diary,
+      date: date.split("T")[0],
+      emotion: diary.emotion || emotionMap[diary.emotionLabel] || emotionMap[diary.emotionType] || "APATHY",
+      contentLength: diary.contentLength || diary.content?.length || 0,
+    };
+  };
+
+  const fetchDiaryByDate = async (dateStr: string) => {
+    const findDiaryForDate = (data: any) => {
+      if (Array.isArray(data)) {
+        return data.find((diary) => {
+          const diaryDate = (diary.date || diary.diaryDate || '').split("T")[0];
+          return diaryDate === dateStr;
+        });
+      }
+
+      return data;
+    };
+
+    try {
+      const rangeRes = await api.get("/api/diaries", {
+        params: { from: dateStr, to: dateStr }
+      });
+
+      const diary = findDiaryForDate(rangeRes.data);
+      if (diary) {
+        return diary;
+      }
+    } catch (error) {
+      if (!isExpectedDiaryDetailError(error)) {
+        throw error;
+      }
+    }
+
+    const res = await api.get(`/api/diaries?date=${dateStr}`);
+    return res.data;
+  };
+
   const handleCellClick = async (dateStr: string) => {
     try {
-      const res = await api.get(`/api/diaries?date=${dateStr}`);
+      const diary = await fetchDiaryByDate(dateStr);
 
-      if (!res.data) {
+      if (!diary) {
         toast.error("해당 날짜에 일기가 없어요.");
         return;
       }
 
-      const diary = res.data;
-
-      // 📌 CalendarView에서 쓰고 있는 emotion 매핑
-      const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
-        "기쁨": "JOY",
-        "슬픔": "SADNESS",
-        "분노": "ANGER",
-        "화남": "ANGER",
-        "무기력": "APATHY",
-        "예민": "SENSITIVE",
-      };
-
-      // 📌 CalendarView와 동일한 형태로 diary 객체 재구성
-      const finalDiary = {
-        ...diary,
-        date: diary.date.split("T")[0],    // "YYYY-MM-DD"만 남기기
-        emotion: emotionMap[diary.emotionLabel] || "APATHY",
-        contentLength: diary.contentLength || diary.content?.length || 0,
-      };
-
-      // 📌 이제 완성된 diary를 넘기니까 DiaryDetailView에서도 정상 작동!
-      setSelectedDiary(finalDiary);
+      setSelectedDiary(normalizeDiary(diary, dateStr));
 
     } catch (e) {
       if (isNotFoundError(e)) {
@@ -207,12 +242,42 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
   };
 
   // 일기 저장 후 처리
-  const handleDiarySave = () => {
+  const handleDiarySave = async (savedDiary?: any) => {
+    const shouldOpenDetail = editMode && editingDiary;
+    const savedDate = editingDiary?.date || selectedDateForWrite;
+    const optimisticDiary = shouldOpenDetail && savedDate
+      ? normalizeDiary({
+          ...editingDiary,
+          ...savedDiary,
+          date: savedDate,
+          content: savedDiary?.content ?? editingDiary?.content,
+        }, savedDate)
+      : null;
+
     setIsWriteDialogOpen(false);
     setSelectedDateForWrite('');
     setEditMode(false);
     setEditingDiary(null);
     setCalendarRefreshKey((prev) => prev + 1);
+
+    if (optimisticDiary) {
+      setSelectedDiary(optimisticDiary);
+    }
+
+    if (!shouldOpenDetail || !savedDate) {
+      return;
+    }
+
+    try {
+      const diary = await fetchDiaryByDate(savedDate);
+
+      if (diary) {
+        setSelectedDiary(normalizeDiary(diary, savedDate));
+      }
+    } catch (error) {
+      console.error("수정된 일기 상세 재조회 실패:", error);
+      toast.error("수정된 일기 상세를 다시 불러오지 못했습니다.");
+    }
   };
 
   // 일기 데이터 가져오기
@@ -263,7 +328,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
         // 3️⃣ 일기 없는 날짜의 404 요청을 만들지 않도록 실제 일기 날짜만 병렬 호출
         const diaryResults = await Promise.all(
           dateList.map((dateStr) => 
-            api.get(`/api/diaries?date=${dateStr}`).catch((error) => {
+            fetchDiaryByDate(dateStr).then((data) => ({ data })).catch((error) => {
               if (!isExpectedDiaryDetailError(error)) {
                 console.error("날짜별 일기 상세 로딩 실패:", error);
               }
@@ -277,8 +342,10 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           if (!res || !res.data) return;
 
           const diary = res.data;
-          const dateStr = diary.date.split("T")[0];
+          const dateStr = (diary.date || diary.diaryDate || '').split("T")[0];
           const length = diary.content ? diary.content.length : 0;
+
+          if (!dateStr) return;
 
           if (!map[dateStr]) {
             map[dateStr] = {}; // 없을 경우 생성

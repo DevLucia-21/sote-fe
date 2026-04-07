@@ -14,18 +14,20 @@ interface AnswerSheetProps {
   question: Question;
   isEditMode: boolean;
   existingAnswerId?: number | null;
-  onSave: () => void;
+  existingAnswer?: Partial<Answer> | null;
+  onSave: (answer?: Partial<Answer>) => void;
   onCancel: () => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
-export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, onCancel }: AnswerSheetProps) {
+export function AnswerSheet({ question, isEditMode, existingAnswerId, existingAnswer, onSave, onCancel }: AnswerSheetProps) {
   const [answerText, setAnswerText] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [savedAnswer, setSavedAnswer] = useState<Partial<Answer> | null>(null);
   
   // 수정 모드일 때 남은 시간
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
@@ -35,8 +37,33 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
   const minLength = 5;
   const isValid = answerText.trim().length >= minLength;
 
+  const getLocalDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyAnswer = (answer: Partial<Answer>) => {
+    setAnswerText(answer.answerText || '');
+
+    const answeredAt = answer.answeredAt ? new Date(answer.answeredAt).getTime() : Date.now();
+    const elapsedSeconds = Math.floor((Date.now() - answeredAt) / 1000);
+    const remaining = 600 - elapsedSeconds;
+
+    if (remaining > 0) {
+      setRemainingSeconds(remaining);
+      setCanEdit(true);
+    } else {
+      setRemainingSeconds(0);
+      setCanEdit(false);
+    }
+  };
+
   useEffect(() => {
-    if (isEditMode && existingAnswerId) {
+    if (isEditMode && existingAnswer?.answerText) {
+      applyAnswer(existingAnswer);
+    } else if (isEditMode && existingAnswerId) {
       loadExistingAnswer();
     }
 
@@ -45,7 +72,7 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
         clearInterval(timerRef.current);
       }
     };
-  }, [isEditMode, existingAnswerId]);
+  }, [isEditMode, existingAnswerId, existingAnswer]);
 
   useEffect(() => {
     if (remainingSeconds !== null && remainingSeconds > 0) {
@@ -87,7 +114,7 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
       if (!res.data || res.data.length === 0) return;
 
       // 👉 오늘의 questionId + day가 일치하는 답변 찾기
-      const todayStr = today.toISOString().slice(0, 10);
+      const todayStr = getLocalDateKey(today);
       const todayDay = today.getDate();
 
       const myAnswer = res.data.find((item) => {
@@ -101,20 +128,7 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
 
       if (!myAnswer) return;
 
-      setAnswerText(myAnswer.answerText);
-
-      // 수정 제한 시간 계산
-      const answeredAt = new Date(myAnswer.answeredAt).getTime();
-      const elapsedSeconds = Math.floor((Date.now() - answeredAt) / 1000);
-      const remaining = 600 - elapsedSeconds;
-
-      if (remaining > 0) {
-        setRemainingSeconds(remaining);
-        setCanEdit(true);
-      } else {
-        setRemainingSeconds(0);
-        setCanEdit(false);
-      }
+      applyAnswer(myAnswer);
 
     } catch (err) {
       console.error("답변 불러오기 실패:", err);
@@ -139,20 +153,33 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
       const month = String(today.getMonth() + 1).padStart(2, "0");
       const formattedMonth = `${year}-${month}`;
 
+      let answerResponse: Partial<Answer> | null = null;
+
       if (isEditMode && existingAnswerId) {
         // 답변 수정
-        await api.put(`/api/questions/answers/${existingAnswerId}`, {
+        const res = await api.put(`/api/questions/answers/${existingAnswerId}`, {
           answerText: answerText.trim()
         });
+        answerResponse = res.data;
 
       } else {
         // 새 답변 저장
-        await api.post(`/api/questions/${question.id}/answers`, {
+        const res = await api.post(`/api/questions/${question.id}/answers`, {
           answerText: answerText.trim(),
           month: formattedMonth,
         });
+        answerResponse = res.data;
       }
 
+      setSavedAnswer({
+        ...existingAnswer,
+        ...answerResponse,
+        id: answerResponse?.id ?? existingAnswerId ?? existingAnswer?.id,
+        questionId: answerResponse?.questionId ?? question.id,
+        questionDay: answerResponse?.questionDay ?? question.questionDay,
+        answerText: answerResponse?.answerText ?? answerText.trim(),
+        answeredAt: answerResponse?.answeredAt ?? existingAnswer?.answeredAt ?? new Date().toISOString(),
+      });
       setSaveStatus("success");
       setShowSuccessDialog(true);
 
@@ -173,7 +200,13 @@ export function AnswerSheet({ question, isEditMode, existingAnswerId, onSave, on
 
   const handleSuccessConfirm = () => {
     setShowSuccessDialog(false);
-    onSave();
+    onSave(savedAnswer || {
+      id: existingAnswerId ?? existingAnswer?.id,
+      questionId: question.id,
+      questionDay: question.questionDay,
+      answerText: answerText.trim(),
+      answeredAt: existingAnswer?.answeredAt ?? new Date().toISOString(),
+    });
   };
 
   return (

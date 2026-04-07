@@ -43,6 +43,80 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const getErrorStatus = (error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error
+    ) {
+      return (error as { response?: { status?: number } }).response?.status;
+    }
+
+    return undefined;
+  };
+
+  const fetchDiaryByDate = async (dateStr: string) => {
+    const findDiaryForDate = (data: any) => {
+      if (Array.isArray(data)) {
+        return data.find((item) => {
+          const itemDate = (item.date || item.diaryDate || '').split("T")[0];
+          return itemDate === dateStr;
+        });
+      }
+
+      return data;
+    };
+
+    try {
+      const rangeRes = await api.get("/api/diaries", {
+        params: { from: dateStr, to: dateStr }
+      });
+
+      const diaryForDate = findDiaryForDate(rangeRes.data);
+      if (diaryForDate) {
+        return diaryForDate;
+      }
+    } catch (error) {
+      const status = getErrorStatus(error);
+
+      if (status !== 403 && status !== 404) {
+        throw error;
+      }
+    }
+
+    const res = await api.get(`/api/diaries?date=${dateStr}`);
+    return res.data;
+  };
+
+  const createFallbackAnalysisData = (diaryData: any): AnalysisResultType => {
+    const emotionMap: Record<string, any> = {
+      JOY: "기쁨",
+      SADNESS: "슬픔",
+      ANGER: "분노",
+      APATHY: "무기력",
+      SENSITIVE: "예민",
+      "기쁨": "기쁨",
+      "슬픔": "슬픔",
+      "분노": "분노",
+      "화남": "화남",
+      "무기력": "무기력",
+      "예민": "예민",
+    };
+
+    const emotion = emotionMap[diaryData.emotion] || emotionMap[diaryData.emotionLabel] || "기쁨";
+    const score = Number(diaryData.score ?? diaryData.emotionScore ?? 3);
+    const confidence = score <= 5 ? Math.round((score / 5) * 100) : Math.round(score * 100);
+
+    return {
+      id: `fallback-${diaryData.id}`,
+      date: diaryData.date,
+      emotion,
+      confidence: Math.min(Math.max(confidence, 0), 100),
+      reason: "분석 결과를 아직 불러오지 못했어요.",
+      description: "일기 내용은 저장되어 있어요. 분석 결과가 준비되면 다시 표시됩니다.",
+    } as AnalysisResultType;
+  };
+
   async function fetchChallenge() {
     try {
       // 오늘 이미 추천되었으면 여기서 받아짐
@@ -75,12 +149,28 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         loadProfile();
 
         // 1) 일기 상세
-        const diaryRes = await api.get(`/api/diaries?date=${diary.date}`);
-        setDiaryData(diaryRes.data);
-        console.log("일기 상세", diaryRes.data)
+        const diaryData = diary.id && diary.content ? diary : await fetchDiaryByDate(diary.date);
+        if (!diaryData?.id) {
+          throw new Error(`일기 상세를 찾을 수 없습니다: ${diary.date}`);
+        }
+
+        setDiaryData(diaryData);
+        console.log("일기 상세", diaryData)
 
         // 2) 분석 데이터 가져오기
-        const analysisRes = await api.get(`/api/analysis/${diaryRes.data.id}`);
+        let analysisRes;
+        try {
+          analysisRes = await api.get(`/api/analysis/${diaryData.id}`);
+        } catch (error) {
+          if (getErrorStatus(error) === 404) {
+            console.warn("분석 결과가 아직 없어 기본 정보로 상세를 표시합니다:", diaryData.id);
+            setAnalysisData(createFallbackAnalysisData(diaryData));
+            return;
+          }
+
+          throw error;
+        }
+
         const raw = analysisRes.data;
         console.log("🔥🔥 [Analysis Raw Response]", JSON.stringify(raw, null, 2));
 
@@ -91,7 +181,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           try {
             const lpRes = await api.get("/api/lp/list");  // 🔥 허용된 API
             const reward = lpRes.data.find(
-              (item: any) => item.rewardDate === diary.date
+              (item: any) => (item.rewardDate || '').split("T")[0] === diaryData.date
             );
 
             if (reward?.albumImageUrl) {
@@ -162,10 +252,12 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   if (loading || !diaryData || !analysisData) {
     return <div className="flex justify-center items-center min-h-screen py-20">로딩 중...</div>;
   }
+
+  const detailDiary = diaryData;
   const color = emotionColors[analysisData.emotion];
   
   const getWriteTypeIcon = () => {
-    switch (diary.writeType) {
+    switch (detailDiary.writeType) {
       case 'TEXT':
         return <FileText className="w-4 h-4" />;
       case 'VOICE':
@@ -178,7 +270,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   };
 
   const getWriteTypeLabel = () => {
-    switch (diary.writeType) {
+    switch (detailDiary.writeType) {
       case 'TEXT':
         return '텍스트';
       case 'STT':
@@ -238,7 +330,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           className="text-center mb-8"
         >
           <p className="text-primary">
-            {new Date(diary.date).toLocaleDateString('ko-KR', {
+            {new Date(detailDiary.date).toLocaleDateString('ko-KR', {
               year: 'numeric',
               month: 'long',
               day: 'numeric',
@@ -257,13 +349,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             <Card className="overflow-hidden border-border shadow-lg p-6 bg-card">
               <div className="flex items-start justify-between mb-4">
                 <h3 className="text-foreground">
-                  {new Date(diary.date).toLocaleDateString('ko-KR', {
+                  {new Date(detailDiary.date).toLocaleDateString('ko-KR', {
                     month: 'long',
                     day: 'numeric',
                   })} 일기
                 </h3>
 
-                {diary.imageUrl && (
+                {detailDiary.imageUrl && (
                   <button
                     onClick={() => setIsImageOpen(true)}
                     className="ml-auto mr-2 flex items-center justify-center"
@@ -282,11 +374,11 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
               </div>
               
               {/* Keywords - 이지모드에서 제거 */}
-              {!isEasyMode && diary.keywords && diary.keywords.length > 0 && (
+              {!isEasyMode && detailDiary.keywords && detailDiary.keywords.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm mb-2 text-primary">키워드</p>
                   <div className="flex flex-wrap gap-2">
-                    {diary.keywords.map((keyword, index) => (
+                    {detailDiary.keywords.map((keyword, index) => (
                       <span
                         key={index}
                         className="px-3 py-1 rounded-full text-xs"
@@ -303,7 +395,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
               )}
 
               {/* Diary Content */}
-              {diary.content && (
+              {detailDiary.content && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm text-primary">작성 내용</p>
@@ -320,7 +412,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
                     )}
                   </div>
                   <div className="p-4 rounded-xl leading-relaxed text-sm bg-secondary text-foreground">
-                    {diary.content}
+                    {detailDiary.content}
                   </div>
                 </div>
               )}
@@ -353,7 +445,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           {/* Card 4: Challenge - 당일 작성한 일기만 표시, 이지모드에서 제거 */}
           {!isEasyMode &&
             analysisData.challenge &&
-            isToday(diary.date) && (
+            isToday(detailDiary.date) && (
             <ChallengeCard
               challenge={analysisData.challenge}
               emotion={analysisData.emotion}
@@ -363,13 +455,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         </div>
       </div>
 
-      {isImageOpen && diary.imageUrl && (
+      {isImageOpen && detailDiary.imageUrl && (
         <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
           onClick={() => setIsImageOpen(false)}  // 바깥 클릭 → 닫기
         >
           <img
-            src={diary.imageUrl}
+            src={detailDiary.imageUrl}
             alt="full"
             className="rounded-lg shadow-lg object-contain w-[280px] h-auto"
             onClick={(e) => e.stopPropagation()} // 이미지 클릭 시 닫힘 방지

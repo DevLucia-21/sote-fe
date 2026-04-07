@@ -314,6 +314,12 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
     setIsLoading(true);
     
     try {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("expiresIn");
+      localStorage.removeItem("user_id");
+      localStorage.removeItem("profileData");
+
       const res = await api.post("/api/auth/login", {
         email: formData.email,
         password: formData.password,

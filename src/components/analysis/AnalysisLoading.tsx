@@ -135,7 +135,7 @@ export function AnalysisLoading({
    *  1) 서버 분석 요청
    ---------------------------- */
   useEffect(() => {
-    if (hasRunRef.current) return;
+    if (!payload?.diaryId || hasRunRef.current) return;
     hasRunRef.current = true;
 
     async function runAnalysis() {
@@ -191,9 +191,7 @@ export function AnalysisLoading({
       }
     }
 
-    if (payload?.diaryId) {
-      runAnalysis();
-    }
+    runAnalysis();
   }, [payload, progress, onComplete]);
 
 

@@ -4,18 +4,20 @@ import { Card, CardContent } from '../ui/card';
 import { Label } from '../ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Textarea } from '../ui/textarea';
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TextDiaryWriteProps {
   onBack: () => void;
-  onSave?: (content: string) => void;
+  onSave?: (diary: { content: string }) => void | Promise<void>;
+  initialContent?: string;
+  isEditMode?: boolean;
+  initialWriteType?: string;
 }
 
-export function TextDiaryWrite({ onBack, onSave }: TextDiaryWriteProps) {
-  const [content, setContent] = useState<string>('');
+export function TextDiaryWrite({ onBack, onSave, initialContent = '', isEditMode = false }: TextDiaryWriteProps) {
+  const [content, setContent] = useState<string>(initialContent);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [showMinLengthDialog, setShowMinLengthDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -36,24 +38,14 @@ export function TextDiaryWrite({ onBack, onSave }: TextDiaryWriteProps) {
     setIsSaving(true);
 
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      setShowSuccessDialog(true);
-      
       if (onSave) {
-        onSave({ content });
+        await onSave({ content: content.trim() });
       }
     } catch (error) {
       setIsSaving(false);
       setErrorMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
       setShowErrorDialog(true);
     }
-  };
-
-  const handleSuccessConfirm = () => {
-    setShowSuccessDialog(false);
-    onBack();
   };
 
   return (
@@ -68,7 +60,7 @@ export function TextDiaryWrite({ onBack, onSave }: TextDiaryWriteProps) {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-xl text-foreground">
-          일기 작성
+          {isEditMode ? '일기 수정' : '일기 작성'}
         </h1>
         <div className="w-9" />
       </div>
@@ -114,37 +106,10 @@ export function TextDiaryWrite({ onBack, onSave }: TextDiaryWriteProps) {
               저장 중...
             </>
           ) : (
-            '저장하기'
+            isEditMode ? '수정하기' : '저장하기'
           )}
         </Button>
       </div>
-
-      {/* 성공 다이얼로그 */}
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="border-border">
-          <DialogHeader>
-            <div className="flex justify-center mb-4">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-primary/10">
-                <CheckCircle2 className="w-6 h-6 text-primary" />
-              </div>
-            </div>
-            <DialogTitle className="text-center text-foreground">
-              저장 완료
-            </DialogTitle>
-            <DialogDescription className="text-center text-muted-foreground">
-              일기가 저장되었습니다.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              onClick={handleSuccessConfirm}
-              className="w-full text-white bg-primary hover:bg-primary/90"
-            >
-              확인
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 오류 다이얼로그 */}
       <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>

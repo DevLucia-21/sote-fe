@@ -22,16 +22,6 @@ const isAuthRequest = (url?: string) => {
   return !!url && url.includes("/api/auth/");
 };
 
-const isAuthProtectedRead = (method?: string, url?: string) => {
-  if (method?.toLowerCase() !== "get" || !url) return false;
-
-  return (
-    url.startsWith("/api/diaries") ||
-    url.startsWith("/api/calendar-notes") ||
-    url.startsWith("/api/users/profile")
-  );
-};
-
 const clearAuthData = () => {
   AuthStorage.clearTokens();
   localStorage.removeItem("expiresIn");
@@ -52,6 +42,11 @@ const notifyAuthExpired = () => {
 // ----------------------------
 apiClient.interceptors.request.use(
   (config) => {
+    if (isAuthRequest(config.url)) {
+      delete config.headers.Authorization;
+      return config;
+    }
+
     const token = AuthStorage.getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     hasNotifiedAuthExpired = false;
@@ -70,7 +65,6 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config as any;
     const status = error.response?.status;
     const url = originalRequest?.url;
-    const method = originalRequest?.method;
 
     if (isAuthRequest(url)) {
       return Promise.reject(error);
@@ -124,10 +118,6 @@ apiClient.interceptors.response.use(
     }
 
     if (status === 401) {
-      notifyAuthExpired();
-    }
-
-    if (status === 403 && isAuthProtectedRead(method, url)) {
       notifyAuthExpired();
     }
 

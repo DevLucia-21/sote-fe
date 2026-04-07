@@ -14,6 +14,7 @@ import { isDailyQuestionEnabled } from "../utils/settings";
 import { AnalysisLoading } from './analysis/AnalysisLoading';
 import { AnalysisResult } from './analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType, EmotionType } from './analysis/types';
+import { Answer } from './questions/types';
 import {
   Type,
   Mic,
@@ -38,10 +39,57 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   const [isWriting, setIsWriting] = useState(false);
   const showQuestion = isDailyQuestionEnabled();
   const [showQuestionSheet, setShowQuestionSheet] = useState(false);
-  const [hasAnswer, setHasAnswer] = useState(false); // Mock: 답변 여부
+  const [hasAnswer, setHasAnswer] = useState(false);
+  const [todayAnswer, setTodayAnswer] = useState<Partial<Answer> | null>(null);
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
   const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
+  const [editingDiary, setEditingDiary] = useState<any | null>(null);
+
+  const getErrorStatus = (error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error
+    ) {
+      return (error as { response?: { status?: number } }).response?.status;
+    }
+
+    return undefined;
+  };
+
+  const findDiaryForDate = (data: any, dateStr: string) => {
+    if (Array.isArray(data)) {
+      return data.find((diary) => {
+        const diaryDate = (diary.date || diary.diaryDate || '').split("T")[0];
+        return diaryDate === dateStr;
+      });
+    }
+
+    return data;
+  };
+
+  const fetchDiaryByDate = async (dateStr: string) => {
+    try {
+      const rangeRes = await api.get("/api/diaries", {
+        params: { from: dateStr, to: dateStr }
+      });
+
+      const diary = findDiaryForDate(rangeRes.data, dateStr);
+      if (diary) {
+        return diary;
+      }
+    } catch (error) {
+      const status = getErrorStatus(error);
+
+      if (status !== 403 && status !== 404) {
+        throw error;
+      }
+    }
+
+    const res = await api.get("/api/diaries", { params: { date: dateStr } });
+    return findDiaryForDate(res.data, dateStr);
+  };
 
   //해당 날짜의 일기 여부 확인
   const checkDiaryExists = async (year: string, month: string, day: string) => {
@@ -147,10 +195,77 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   // }, [selectedYear, selectedMonth, selectedDay]);
   useEffect(() => {}, [selectedYear, selectedMonth, selectedDay]);
 
+  const getLocalDateKey = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const getCurrentMonthKey = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const getAnswerDateKey = (answer: any) => {
+    const rawDate = answer.answeredAt || answer.createdAt || answer.updatedAt;
+    if (!rawDate) return "";
+
+    return rawDate.slice(0, 10);
+  };
+
+  const normalizeAnswer = (answer: any, question, fallbackText?: string): Partial<Answer> => {
+    return {
+      id: answer?.id ?? answer?.answerId,
+      questionId: answer?.questionId ?? answer?.question?.id ?? question.id,
+      questionContent: answer?.questionContent ?? answer?.question?.content ?? question.content,
+      questionDay: answer?.questionDay ?? answer?.question?.questionDay ?? question.questionDay,
+      answerText: answer?.answerText ?? answer?.content ?? answer?.answer ?? fallbackText ?? '',
+      answeredAt: answer?.answeredAt ?? answer?.createdAt ?? answer?.createdDate ?? new Date().toISOString(),
+      updatedAt: answer?.updatedAt,
+      answerMonth: answer?.answerMonth,
+    };
+  };
+
+  const loadTodayAnswer = async (question) => {
+    if (!question) return;
+
+    try {
+      const today = new Date();
+      const todayStr = getLocalDateKey(today);
+      const formattedMonth = getCurrentMonthKey();
+
+      const res = await api.get("/api/questions/answers/me", {
+        params: { month: formattedMonth }
+      });
+
+      const answer = Array.isArray(res.data)
+        ? res.data.find((item: Answer) => {
+            const questionId = item.questionId ?? (item as any).question?.id;
+            const questionDay = item.questionDay ?? (item as any).question?.questionDay;
+
+            return (
+              questionId === question.id &&
+              questionDay === question.questionDay &&
+              getAnswerDateKey(item) === todayStr
+            );
+          })
+        : null;
+
+      setTodayAnswer(answer ? normalizeAnswer(answer, question) : null);
+      setHasAnswer(!!answer);
+    } catch (err) {
+      console.error("오늘의 질문 답변 조회 실패:", err);
+    }
+  };
+
   // 오늘의 질문 가져오기
   useEffect(() => {
     api.get("/questions/today")
-      .then(res => setTodayQuestion(res.data))
+      .then(res => {
+        setTodayQuestion(res.data);
+        loadTodayAnswer(res.data);
+      })
       .catch(() => setTodayQuestion(null));
   }, []);
 
@@ -181,21 +296,92 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   };
 
   const handleStartWriting = async () => {
-    // const exists = await checkDiaryExists(selectedYear, selectedMonth, selectedDay);
-
-    // if (exists) {
-    //   return;
-    // }
-
     if (!selectedYear || !selectedMonth || !selectedDay) {
       toast.error('날짜를 선택해주세요.');
       return;
     }
 
+    try {
+      const existingDiary = await fetchDiaryByDate(selectedDateStr);
+
+      if (existingDiary?.id || existingDiary?.content) {
+        setEditingDiary({
+          ...existingDiary,
+          date: (existingDiary.date || existingDiary.diaryDate || selectedDateStr).split("T")[0],
+        });
+        setDiaryType('text');
+        setKeywords(
+          Array.isArray(existingDiary.keywords)
+            ? existingDiary.keywords.map((keyword: any) => typeof keyword === 'string' ? keyword : keyword.content).filter(Boolean)
+            : []
+        );
+        setIsWriting(true);
+        toast.info('이미 작성한 일기를 불러왔어요. 여기서 수정할 수 있습니다.');
+        return;
+      }
+    } catch (error) {
+      if (getErrorStatus(error) !== 404) {
+        console.error("일기 조회 실패:", error);
+        toast.error("기존 일기를 확인하지 못했습니다.");
+        return;
+      }
+    }
+
+    setEditingDiary(null);
     setIsWriting(true);
   };
 
   const handleSave = async (diary) => {
+    const isEditMode = !!editingDiary;
+    const targetDate = isEditMode
+      ? (editingDiary.date || editingDiary.diaryDate || selectedDateStr).split("T")[0]
+      : selectedDateStr;
+
+    if (isEditMode) {
+      try {
+        const payload = {
+          date: targetDate,
+          content: diary.content,
+        };
+        const accessToken = localStorage.getItem("accessToken");
+
+        if (!accessToken) {
+          throw new Error("로그인 토큰이 없어 일기를 수정할 수 없습니다.");
+        }
+
+        await api.put("/api/diaries", payload, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        setEditingDiary(null);
+        setIsWriting(false);
+        setAnalysisState("idle");
+        toast.success("일기가 수정되었습니다.");
+        return;
+      } catch (err) {
+        console.error(err);
+
+        if (getErrorStatus(err) === 403) {
+          toast.error("이 일기는 수정 권한이 없거나 수정 가능 시간이 지났습니다.");
+        } else {
+          toast.error("일기 수정 실패");
+        }
+
+        throw err;
+      }
+    }
+
+    const analysisDraftPayload = {
+      diaryId: null,
+      text: diary.content,
+      content: diary.content,
+      date: targetDate,
+    };
+
+    setPendingAnalysisPayload(analysisDraftPayload);
+    setIsWriting(false);
+    setAnalysisState("analyzing");
+
     try {
       const commonKeywords = Array.isArray(userKeywords)
         ? userKeywords.filter(kw => keywords.includes(kw.content)).map(kw => kw.id)
@@ -207,7 +393,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       if (diaryType === "text") {
         payload = {
           content: diary.content,
-          date: selectedDateStr,
+          date: targetDate,
           keywordIds: commonKeywords,
           emotionType: diary.emotionType,
         };
@@ -216,7 +402,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       else if (diaryType === "voice") {
         payload = {
           content: diary.content,
-          date: selectedDateStr,
+          date: targetDate,
           keywordIds: diary.keywordIds,
           emotionType: diary.emotionType,
           sttId: diary.sttId,
@@ -227,7 +413,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       else if (diaryType === "handwriting") {
         payload = {
           content: diary.content,
-          date: selectedDateStr,
+          date: targetDate,
           keywordIds: commonKeywords,
           emotionType: diary.emotionType,
           canvasImageBase64: diary.imageBase64 ?? null,
@@ -236,19 +422,25 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         res = await api.post("/api/diaries/canvas", payload);
       }
 
-      const savedDiaryId = res.data.id;
+      const savedDiaryId = res?.data?.id ?? res?.data?.diaryId ?? editingDiary?.id;
+
+      if (!savedDiaryId) {
+        throw new Error("저장된 일기 ID를 찾을 수 없습니다.");
+      }
 
       setPendingAnalysisPayload({
         diaryId: savedDiaryId,
-        text: diary.content,
-        date: selectedDateStr,
+        text: analysisDraftPayload.text,
+        content: analysisDraftPayload.content,
+        date: analysisDraftPayload.date,
       });
-
-      setAnalysisState("analyzing");
+      setEditingDiary(null);
 
     } catch (err) {
       console.error(err);
       toast.error("일기 저장 실패");
+      setAnalysisState("idle");
+      throw err;
     }
   };
 
@@ -279,15 +471,24 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
   const handleBack = () => {
     setIsWriting(false);
+    setEditingDiary(null);
   };
 
   const handleOpenQuestionSheet = () => {
     setShowQuestionSheet(true);
   };
 
-  const handleQuestionSaved = () => {
+  const handleQuestionSaved = (answer?: Partial<Answer>) => {
     setShowQuestionSheet(false);
-    setHasAnswer(true);
+
+    if (todayQuestion) {
+      setTodayAnswer(normalizeAnswer(answer || {}, todayQuestion, answer?.answerText));
+      setHasAnswer(true);
+    }
+
+    if (todayQuestion) {
+      loadTodayAnswer(todayQuestion);
+    }
     toast.success('답변이 저장되었습니다!');
   };
 
@@ -325,7 +526,8 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
       <AnswerSheet
         question={todayQuestion}
         isEditMode={hasAnswer}
-        existingAnswerId={hasAnswer ? 1 : null}
+        existingAnswerId={todayAnswer?.id ?? null}
+        existingAnswer={todayAnswer}
         onSave={handleQuestionSaved}
         onCancel={() => setShowQuestionSheet(false)}
       />
@@ -335,7 +537,15 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
   // 일기 작성 화면
   if (isWriting) {
     if (diaryType === 'text') {
-      return <TextDiaryWrite onBack={handleBack} onSave={handleSave} initialWriteType="TEXT" />;
+      return (
+        <TextDiaryWrite
+          onBack={handleBack}
+          onSave={handleSave}
+          initialWriteType="TEXT"
+          initialContent={editingDiary?.content || ''}
+          isEditMode={!!editingDiary}
+        />
+      );
     }
     
     if (diaryType === 'voice') {

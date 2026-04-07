@@ -33,7 +33,7 @@ import { ko } from 'date-fns/locale';
 interface DiaryWriteProps {
   onBack?: () => void;
   onClose?: () => void;
-  onSave?: (diary: Partial<Diary>) => void;
+  onSave?: (diary: Partial<Diary>) => void | Promise<void>;
   editingDiary?: Diary;
   initialWriteType?: WriteType;
   date?: string; // YYYY-MM-DD format
@@ -492,6 +492,35 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       return;
     }
 
+    if (editMode && editingDiary) {
+      const editPayload = {
+        date: editingDiary.date,
+        content: content.trim(),
+      };
+
+      console.group("Diary Edit Payload Debug");
+      console.log("date:", editPayload.date);
+      console.log("content:", editPayload.content);
+      console.log("payload:", editPayload);
+      console.groupEnd();
+
+      try {
+        setIsSaving(true);
+        const res = await api.put("/api/diaries", editPayload);
+
+        setIsSaving(false);
+        toast.success("일기가 수정되었습니다!");
+        void onSave?.(res.data);
+      } catch (e) {
+        console.error("일기 수정 실패:", e);
+        toast.error("일기 수정 중 문제가 발생했습니다.");
+      } finally {
+        setIsSaving(false);
+      }
+
+      return;
+    }
+
     // 백엔드가 요구하는 payload
     const payload = {
       date: editingDiary ? editingDiary.date : formatDateLocal(date),
@@ -527,15 +556,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     try {
       setIsSaving(true);
 
-      // ✨ 수정 모드 (PUT /api/diaries)
-      if (editMode && editingDiary) {
-        const res = await api.put("/api/diaries", payload);
-
-        toast.success("일기가 수정되었습니다!");
-        onSave?.(res.data);
-        return;
-      }
-
       // ✨ 새 일기 저장 (writeType 따라 URL 분기)
       let res;
 
@@ -563,7 +583,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       }
 
       toast.success("일기가 저장되었습니다!");
-      onSave?.(res.data);
+      void onSave?.(res.data);
 
     } catch (e) {
       console.error("일기 저장 실패:", e);
