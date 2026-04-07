@@ -58,13 +58,25 @@ const emotionMap: Record<EmotionType, string> = {
   예민: "SENSITIVE",
 };
 
+const parseDateLocal = (dateStr: string) => {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const formatDateLocal = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWriteType, date: initialDate, editMode, isEasyMode }: DiaryWriteProps) {
   const [writeType, setWriteType] = useState<WriteType>(initialWriteType || editingDiary?.writeType || 'TEXT');
   const [date, setDate] = useState<Date>(
     initialDate 
-      ? new Date(initialDate) 
+      ? parseDateLocal(initialDate) 
       : editingDiary 
-      ? new Date(editingDiary.date) 
+      ? parseDateLocal(editingDiary.date) 
       : new Date()
   );
   const [content, setContent] = useState(editingDiary?.content || '');
@@ -123,6 +135,16 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     }
   }, [writeType]);
 
+  useEffect(() => {
+    setDate(
+      initialDate
+        ? parseDateLocal(initialDate)
+        : editingDiary
+        ? parseDateLocal(editingDiary.date)
+        : new Date()
+    );
+  }, [initialDate, editingDiary?.date]);
+
   // Helper function to check if diary exists for a date
   const getDiaryByDate = (dateStr: string) => {
     return mockDiaryData.find(d => d.date === dateStr);
@@ -147,7 +169,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   };
 
   const handleDateSelect = (dateStr: string) => {
-    const newDate = new Date(dateStr);
+    const newDate = parseDateLocal(dateStr);
 
     // Check if future date
     if (newDate > new Date()) {
@@ -470,13 +492,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       return;
     }
 
-    const formatDateLocal = (d: Date) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
-    };
-
     // 백엔드가 요구하는 payload
     const payload = {
       date: editingDiary ? editingDiary.date : formatDateLocal(date),
@@ -535,7 +550,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         // canvas로 작성한 경우 → BASE64 필요
         if (imagePreview && imagePreview.startsWith("data:image")) {
           res = await api.post("/api/diaries/canvas", {
-            date: dateStr,
+            date: payload.date,
             content: content.trim(),
             canvasImageBase64: imagePreview, // 백엔드 요구 필드
             keywordIds: payload.keywordIds,

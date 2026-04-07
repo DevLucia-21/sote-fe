@@ -71,6 +71,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
   const [selectedDateForWrite, setSelectedDateForWrite] = useState<string>('');
   const [editMode, setEditMode] = useState(false);
   const [editingDiary, setEditingDiary] = useState<DiaryEntry | null>(null);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -100,6 +101,33 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
   const getDayKey = (day: number) => {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const getErrorStatus = (error: unknown) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error
+    ) {
+      return (error as { response?: { status?: number } }).response?.status;
+    }
+
+    return undefined;
+  };
+
+  const isNotFoundError = (error: unknown) => {
+    return getErrorStatus(error) === 404;
+  };
+
+  const isForbiddenError = (error: unknown) => {
+    return getErrorStatus(error) === 403;
+  };
+
+  const isExpectedDiaryDetailError = (error: unknown) => {
+    return (
+      isNotFoundError(error) ||
+      isForbiddenError(error)
+    );
   };
 
   const handleCellClick = async (dateStr: string) => {
@@ -135,6 +163,16 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       setSelectedDiary(finalDiary);
 
     } catch (e) {
+      if (isNotFoundError(e)) {
+        toast.error("해당 날짜에 일기가 없어요.");
+        return;
+      }
+
+      if (isForbiddenError(e)) {
+        toast.error("해당 일기를 열람할 수 없어요. 다시 로그인하거나 잠시 후 다시 시도해주세요.");
+        return;
+      }
+
       console.error("❌ 날짜별 일기 로딩 실패:", e);
       toast.error("일기 데이터를 불러오지 못했습니다.");
     }
@@ -174,8 +212,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     setSelectedDateForWrite('');
     setEditMode(false);
     setEditingDiary(null);
-    // 캘린더를 리렌더링하기 위해 currentDate를 업데이트
-    setCurrentDate(new Date(currentDate));
+    setCalendarRefreshKey((prev) => prev + 1);
   };
 
   // 일기 데이터 가져오기
@@ -219,19 +256,19 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           };
         });
 
-        // 2️⃣ 현재 달의 날짜들 리스트 만들기
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const dateList: string[] = [];
-        for (let d = 1; d <= daysInMonth; d++) {
-          dateList.push(
-            `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-          );
-        }
+        // 2️⃣ calendar-notes에 실제로 있는 현재 달 일기만 상세 조회
+        const currentMonthPrefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+        const dateList = Object.keys(map).filter((dateStr) => dateStr.startsWith(currentMonthPrefix));
 
-        // 3️⃣ 날짜별로 상세 일기 API를 병렬 호출
+        // 3️⃣ 일기 없는 날짜의 404 요청을 만들지 않도록 실제 일기 날짜만 병렬 호출
         const diaryResults = await Promise.all(
           dateList.map((dateStr) => 
-            api.get(`/api/diaries?date=${dateStr}`).catch(() => null)
+            api.get(`/api/diaries?date=${dateStr}`).catch((error) => {
+              if (!isExpectedDiaryDetailError(error)) {
+                console.error("날짜별 일기 상세 로딩 실패:", error);
+              }
+              return null;
+            })
           )
         );
 
@@ -259,7 +296,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     };
 
     fetchNotes();
-  }, [year, month]);
+  }, [year, month, calendarRefreshKey]);
 
   // 악기 음 샘플 가져오기
   useEffect(() => {
@@ -594,6 +631,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
             </DialogDescription>
           </DialogHeader>
           <DiaryWrite
+            key={`${selectedDateForWrite}-${editMode ? editingDiary?.id ?? 'edit' : 'new'}`}
             date={selectedDateForWrite}
             onBack={() => setIsWriteDialogOpen(false)}
             onSave={handleDiarySave}

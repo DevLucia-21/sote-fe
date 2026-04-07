@@ -14,6 +14,38 @@ const apiClient: AxiosInstance = axios.create({
 // ----------------------------
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
+let hasNotifiedAuthExpired = false;
+
+const AUTH_EXPIRED_EVENT = "auth:expired";
+
+const isAuthRequest = (url?: string) => {
+  return !!url && url.includes("/api/auth/");
+};
+
+const isAuthProtectedRead = (method?: string, url?: string) => {
+  if (method?.toLowerCase() !== "get" || !url) return false;
+
+  return (
+    url.startsWith("/api/diaries") ||
+    url.startsWith("/api/calendar-notes") ||
+    url.startsWith("/api/users/profile")
+  );
+};
+
+const clearAuthData = () => {
+  AuthStorage.clearTokens();
+  localStorage.removeItem("expiresIn");
+  localStorage.removeItem("user_id");
+  localStorage.removeItem("profileData");
+};
+
+const notifyAuthExpired = () => {
+  if (hasNotifiedAuthExpired) return;
+
+  hasNotifiedAuthExpired = true;
+  clearAuthData();
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+};
 
 // ----------------------------
 // Request Interceptor
@@ -22,6 +54,7 @@ apiClient.interceptors.request.use(
   (config) => {
     const token = AuthStorage.getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    hasNotifiedAuthExpired = false;
     return config;
   },
   (error) => Promise.reject(error)
@@ -36,6 +69,12 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as any;
     const status = error.response?.status;
+    const url = originalRequest?.url;
+    const method = originalRequest?.method;
+
+    if (isAuthRequest(url)) {
+      return Promise.reject(error);
+    }
 
     if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -43,8 +82,7 @@ apiClient.interceptors.response.use(
       const refreshToken = AuthStorage.getRefreshToken();
       if (!refreshToken) {
         console.warn("❌ refreshToken 없음 → 로그아웃");
-        AuthStorage.clearTokens();
-        window.location.href = "/login";
+        notifyAuthExpired();
         return Promise.reject(error);
       }
 
@@ -69,8 +107,7 @@ apiClient.interceptors.response.use(
           } catch (err) {
             console.error("❌ Refresh 실패 → 로그아웃");
             isRefreshing = false;
-            AuthStorage.clearTokens();
-            window.location.href = "/login";
+            notifyAuthExpired();
             resolve(null);
           }
         });
@@ -84,6 +121,14 @@ apiClient.interceptors.response.use(
       }
 
       return Promise.reject(error);
+    }
+
+    if (status === 401) {
+      notifyAuthExpired();
+    }
+
+    if (status === 403 && isAuthProtectedRead(method, url)) {
+      notifyAuthExpired();
     }
 
     return Promise.reject(error);

@@ -7,6 +7,14 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<'splash' | 'auth' | 'main'>('splash');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const clearAuthData = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('expiresIn');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('profileData');
+  };
+
   useEffect(() => {
     console.log('🚀 App 시작됨');
     // 스플래시 화면을 2초 후에 숨김
@@ -27,6 +35,20 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      clearAuthData();
+      setIsAuthenticated(false);
+      setCurrentScreen('auth');
+    };
+
+    window.addEventListener('auth:expired', handleAuthExpired);
+
+    return () => {
+      window.removeEventListener('auth:expired', handleAuthExpired);
+    };
+  }, []);
+
   console.log('📺 현재 화면:', currentScreen);
 
   const handleLogin = () => {
@@ -36,6 +58,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    clearAuthData();
     setIsAuthenticated(false);
     setCurrentScreen('auth');
     console.log('👋 로그아웃 완료');
