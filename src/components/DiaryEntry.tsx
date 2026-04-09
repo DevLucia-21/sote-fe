@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
@@ -23,7 +24,8 @@ import {
   Edit3,
   Eye,
   PenLine,
-  Plus
+  Plus,
+  CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,10 +34,12 @@ type AnalysisState = 'idle' | 'analyzing' | 'completed';
 
 interface DiaryEntryProps {
   onNavigateToChallenge?: () => void;
+  onNavigateToCalendar?: () => void;
 }
 
-export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
+export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: DiaryEntryProps = {}) {
   const [showDiaryExistsModal, setShowDiaryExistsModal] = useState(false);
+  const [showEditCompleteDialog, setShowEditCompleteDialog] = useState(false);
   const [isWriting, setIsWriting] = useState(false);
   const showQuestion = isDailyQuestionEnabled();
   const [showQuestionSheet, setShowQuestionSheet] = useState(false);
@@ -356,7 +360,7 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
         setEditingDiary(null);
         setIsWriting(false);
         setAnalysisState("idle");
-        toast.success("일기가 수정되었습니다.");
+        setShowEditCompleteDialog(true);
         return;
       } catch (err) {
         console.error(err);
@@ -616,6 +620,30 @@ export function DiaryEntry({ onNavigateToChallenge }: DiaryEntryProps = {}) {
 
   return (
     <div className="min-h-screen p-4 pb-20 bg-background">
+      <Dialog open={showEditCompleteDialog} onOpenChange={setShowEditCompleteDialog}>
+        <DialogContent className="border-border">
+          <DialogHeader>
+            <div className="flex justify-center mb-3">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-primary/10">
+                <CheckCircle2 className="w-7 h-7 text-primary" />
+              </div>
+            </div>
+            <DialogTitle className="text-center text-foreground">수정 완료!</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="w-full bg-primary text-white hover:bg-primary/90"
+              onClick={() => {
+                setShowEditCompleteDialog(false);
+                onNavigateToCalendar?.();
+              }}
+            >
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Header */}
       <div className="flex items-center justify-center mb-6">
         <h1 className="text-xl flex items-center gap-2 text-foreground">

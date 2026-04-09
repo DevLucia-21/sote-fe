@@ -23,8 +23,14 @@ export function TextDiaryWrite({ onBack, onSave, initialContent = '', isEditMode
   const [errorMessage, setErrorMessage] = useState('');
 
   const MINIMUM_LENGTH = 10;
+  const hasChanged = content.trim() !== initialContent.trim();
+  const isSaveDisabled = isSaving || (isEditMode && !hasChanged);
 
   const handleSave = async () => {
+    if (isEditMode && !hasChanged) {
+      return;
+    }
+
     if (!content.trim()) {
       toast.error('일기 내용을 입력해주세요.');
       return;
@@ -97,7 +103,7 @@ export function TextDiaryWrite({ onBack, onSave, initialContent = '', isEditMode
         </Button>
         <Button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaveDisabled}
           className="flex-1 text-white bg-accent hover:bg-accent/90"
         >
           {isSaving ? (

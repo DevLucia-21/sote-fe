@@ -67,7 +67,12 @@ export function MainApp({ onLogout }: MainAppProps) {
     }
 
     if (currentTab === 'diary') {
-      return <DiaryEntry onNavigateToChallenge={() => setCurrentTab('challenge')} />;
+      return (
+        <DiaryEntry
+          onNavigateToChallenge={() => setCurrentTab('challenge')}
+          onNavigateToCalendar={() => setCurrentTab('calendar')}
+        />
+      );
     }
 
     const CurrentComponent = tabs.find(tab => tab.id === currentTab)?.component || CalendarView;
