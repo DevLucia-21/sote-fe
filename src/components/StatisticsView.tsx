@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import * as Tone from "tone";
 import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -98,9 +98,7 @@ function computeCurrentWeek(baseDate: Date) {
   const month = baseDate.getMonth() + 1;
 
   // baseDate가 포함된 주의 일요일 계산
-  const day = baseDate.getDay(); // 0=일요일
   const sunday = getSunday(baseDate);
-  sunday.setDate(baseDate.getDate() - day);
 
   // 이번 달 1일
   const firstDayOfMonth = new Date(year, month - 1, 1);
@@ -358,8 +356,13 @@ export function StatisticsView() {
         const dateStr = normalize(note.date);
 
         try {
-          const res = await api.get(`/api/diaries?date=${dateStr}`);
-          results[dateStr] = res.data?.content?.length ?? 0;
+          const res = await api.get("/api/diaries", {
+            params: { from: dateStr, to: dateStr },
+          });
+          const diary = Array.isArray(res.data)
+            ? res.data.find((item: any) => normalize(item.date || item.diaryDate || '') === dateStr)
+            : res.data;
+          results[dateStr] = diary?.content?.length ?? 0;
         } catch {
           results[dateStr] = 0;
         }
