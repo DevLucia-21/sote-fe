@@ -163,13 +163,10 @@ export function AnalysisLoading({
     }
 
     try {
-      const res = await api.get('/api/challenge/today');
-      return res.data;
+      const statusRes = await api.get('/api/challenge/status');
+      return statusRes.data.challenge || statusRes.data;
     } catch (err: any) {
-      if (err.response?.data?.message?.includes('이미 추천')) {
-        const res2 = await api.get('/api/challenge/status');
-        return res2.data.challenge || res2.data;
-      }
+      console.error('Challenge API failed:', err);
       return null;
     }
   }

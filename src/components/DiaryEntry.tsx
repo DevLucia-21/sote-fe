@@ -89,10 +89,9 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
       if (status !== 403 && status !== 404) {
         throw error;
       }
-    }
 
-    const res = await api.get("/api/diaries", { params: { date: dateStr } });
-    return findDiaryForDate(res.data, dateStr);
+      return null;
+    }
   };
 
   //해당 날짜의 일기 여부 확인
@@ -502,6 +501,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
       <AnalysisLoading
         instrument="piano"
         payload={pendingAnalysisPayload}
+        triggerAnalysis={false}
         onRetry={handleAnalysisRetry}
         onComplete={(result) => {
           setAnalysisResult(result);
