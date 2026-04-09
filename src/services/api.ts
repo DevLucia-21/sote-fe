@@ -22,6 +22,29 @@ const isAuthRequest = (url?: string) => {
   return !!url && url.includes("/api/auth/");
 };
 
+const isBusiness403Request = (url?: string) => {
+  if (!url) return false;
+
+  return (
+    url.includes("/api/analysis") ||
+    url.includes("/api/challenge/") ||
+    url.includes("/api/ocr/upload") ||
+    url.includes("/ai/stt/transcribe")
+  );
+};
+
+const shouldHandleAuthFailure = (status?: number, url?: string) => {
+  if (status === 401) {
+    return true;
+  }
+
+  if (status === 403 && !isBusiness403Request(url)) {
+    return true;
+  }
+
+  return false;
+};
+
 const clearAuthData = () => {
   AuthStorage.clearTokens();
   localStorage.removeItem("expiresIn");
@@ -70,7 +93,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (status === 401 && !originalRequest._retry) {
+    if (shouldHandleAuthFailure(status, url) && !originalRequest._retry) {
       originalRequest._retry = true;
 
       const refreshToken = AuthStorage.getRefreshToken();
@@ -117,7 +140,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (status === 401) {
+    if (shouldHandleAuthFailure(status, url)) {
       notifyAuthExpired();
     }
 

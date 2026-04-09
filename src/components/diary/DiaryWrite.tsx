@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import api from '../../services/api'
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -11,7 +11,6 @@ import { KeywordChip } from './KeywordChip';
 import { WriteType, EmotionType, Diary } from './types';
 import { addDiaryEntry, mockDiaryData } from '../calendar/mockData';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
-import { AnalysisResult } from '../analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import {
   ArrowLeft,
@@ -100,7 +99,10 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   const [showMinLengthDialog, setShowMinLengthDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResultType | null>(null);
+  const [, setAnalysisResult] = useState<AnalysisResultType | null>(null);
+  const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState<any | null>(null);
+  const [savedDiaryForAnalysis, setSavedDiaryForAnalysis] = useState<Partial<Diary> | null>(null);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
   
   // 음성 녹음 관련 상태
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -481,6 +483,24 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     }
   };
 
+  const handleAnalysisComplete = async () => {
+    const savedDiary = savedDiaryForAnalysis;
+
+    setIsAnalyzing(false);
+    setPendingAnalysisPayload(null);
+    setSavedDiaryForAnalysis(null);
+    setAnalysisResult(null);
+    setAnalysisAttempt(0);
+    if (savedDiary) {
+      await onSave?.(savedDiary);
+    }
+  };
+
+  const fetchSavedDiaryByDate = async (dateStr: string) => {
+    const res = await api.get(`/api/diaries?date=${dateStr}`);
+    return res.data;
+  };
+
   const handleSave = async () => {
     if (!content.trim()) {
       toast.error("일기 내용을 입력해주세요.");
@@ -510,7 +530,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
         setIsSaving(false);
         toast.success("일기가 수정되었습니다!");
-        void onSave?.(res.data);
+        await onSave?.(res.data);
       } catch (e) {
         console.error("일기 수정 실패:", e);
         toast.error("일기 수정 중 문제가 발생했습니다.");
@@ -554,6 +574,11 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     console.log("🔍 editingDiary.keywords:", editingDiary?.keywords);
 
     try {
+      if (!isEasyMode) {
+        setPendingAnalysisPayload({ date: payload.date });
+        setIsAnalyzing(true);
+      }
+
       setIsSaving(true);
 
       // ✨ 새 일기 저장 (writeType 따라 URL 분기)
@@ -583,15 +608,59 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       }
 
       toast.success("일기가 저장되었습니다!");
-      void onSave?.(res.data);
+      const responseDiary = res.data ?? {};
+      const responseDiaryId = responseDiary.id ?? responseDiary.diaryId;
+      const resolvedDiary = responseDiaryId
+        ? responseDiary
+        : await fetchSavedDiaryByDate(payload.date);
+
+      const savedDiary = {
+        ...resolvedDiary,
+        date: payload.date,
+        content: payload.content,
+        writeType,
+      };
+      const savedDiaryId = savedDiary.id ?? (savedDiary as any).diaryId;
+
+      if (!isEasyMode && savedDiaryId) {
+        setSavedDiaryForAnalysis(savedDiary);
+        setPendingAnalysisPayload({
+          diaryId: savedDiaryId,
+          date: payload.date,
+        });
+        setAnalysisAttempt(0);
+        return;
+      }
+
+      setIsAnalyzing(false);
+      await onSave?.(savedDiary);
 
     } catch (e) {
+      setPendingAnalysisPayload(null);
+      setIsAnalyzing(false);
       console.error("일기 저장 실패:", e);
       toast.error("일기 저장 중 문제가 발생했습니다.");
     } finally {
       setIsSaving(false);
     }
   };
+
+  if (isAnalyzing && pendingAnalysisPayload && !isEasyMode) {
+    return (
+      <AnalysisLoading
+        key={`analysis-${pendingAnalysisPayload.diaryId ?? 'pending'}-${analysisAttempt}`}
+        instrument="piano"
+        payload={pendingAnalysisPayload}
+        triggerAnalysis={false}
+        onRetry={() => {
+          setAnalysisAttempt((prev) => prev + 1);
+        }}
+        onComplete={() => {
+          void handleAnalysisComplete();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 pb-20 bg-background">
@@ -1024,12 +1093,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
           </CardContent>
         </Card>
       )}
-
-      {/* 분석 로딩 중 */}
-      {isAnalyzing && !isEasyMode && <AnalysisLoading />}
-
-      {/* 분석 결과 */}
-      {analysisResult && !isEasyMode && <AnalysisResult result={analysisResult} />}
 
       {/* 최소 글자 수 미달 다이얼로그 */}
       <Dialog open={showMinLengthDialog} onOpenChange={setShowMinLengthDialog}>

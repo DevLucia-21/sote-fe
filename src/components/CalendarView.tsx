@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import * as Tone from "tone";
 import api from '../services/api';
 import { motion } from 'motion/react';
@@ -243,7 +243,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
   // 일기 저장 후 처리
   const handleDiarySave = async (savedDiary?: any) => {
-    const shouldOpenDetail = editMode && editingDiary;
+    const shouldOpenDetail = Boolean(savedDiary || (editMode && editingDiary));
     const savedDate = editingDiary?.date || selectedDateForWrite;
     const optimisticDiary = shouldOpenDetail && savedDate
       ? normalizeDiary({
@@ -253,12 +253,29 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           content: savedDiary?.content ?? editingDiary?.content,
         }, savedDate)
       : null;
+    const createdDiary = !shouldOpenDetail && savedDate && savedDiary
+      ? normalizeDiary({
+          ...savedDiary,
+          date: savedDate,
+          content: savedDiary.content,
+        }, savedDate)
+      : null;
 
     setIsWriteDialogOpen(false);
     setSelectedDateForWrite('');
     setEditMode(false);
     setEditingDiary(null);
     setCalendarRefreshKey((prev) => prev + 1);
+    if (createdDiary && savedDate) {
+      setMonthNotes((prev) => ({
+        ...prev,
+        [savedDate]: {
+          ...prev[savedDate],
+          ...createdDiary,
+          contentLength: createdDiary.content?.length ?? createdDiary.contentLength ?? 0,
+        },
+      }));
+    }
 
     if (optimisticDiary) {
       setSelectedDiary(optimisticDiary);
@@ -273,10 +290,15 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
       if (diary) {
         setSelectedDiary(normalizeDiary(diary, savedDate));
+        return;
       }
     } catch (error) {
       console.error("수정된 일기 상세 재조회 실패:", error);
       toast.error("수정된 일기 상세를 다시 불러오지 못했습니다.");
+    }
+
+    if (createdDiary) {
+      setSelectedDiary(createdDiary);
     }
   };
 

@@ -1,17 +1,18 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Progress } from '../ui/progress';
 import { Button } from '../ui/button';
 import { InstrumentType, AnalysisStage } from './types';
 import { loadingMessages } from './mockData';
 import { characterInfo } from '../common/characterImages';
-import api from "../../services/api";
+import api from '../../services/api';
 
 interface AnalysisLoadingProps {
   instrument?: InstrumentType;
   onRetry?: () => void;
-  onComplete?: (result: any) => void;   // ★ 분석 결과 전달
-  payload: any;                         // ★ 분석 요청 payload
+  onComplete?: (result: any) => void;
+  payload: any;
+  triggerAnalysis?: boolean;
 }
 
 const stages: { stage: AnalysisStage; label: string }[] = [
@@ -19,6 +20,8 @@ const stages: { stage: AnalysisStage; label: string }[] = [
   { stage: 'emotion', label: '감정 추출 중' },
   { stage: 'music', label: '음악 추천 중' },
 ];
+
+const STAGE_PROGRESS_POINTS = [34, 68, 92];
 
 const instrumentInfoMap: Record<InstrumentType, { image: string; name: string }> = {
   piano: characterInfo.PIANO,
@@ -34,7 +37,7 @@ function mapBackendToFrontend(raw: any) {
     emotion: raw.emotionLabel,
     confidence: Math.round(raw.emotionScore * 100),
     reason: raw.emotionReason,
-    description: raw.emotionReason,  // 동일 값 사용
+    description: raw.emotionReason,
     music: raw.selectedTrackTitle
       ? {
           title: raw.selectedTrackTitle,
@@ -49,20 +52,47 @@ function mapBackendToFrontend(raw: any) {
   };
 }
 
-export function AnalysisLoading({ 
-  instrument = 'piano', 
+function hasAnalysisFields(raw: any) {
+  return Boolean(raw?.emotionLabel || raw?.emotionReason || raw?.selectedTrackTitle || raw?.selectedTrackArtist);
+}
+
+function getStageIndexForProgress(progress: number) {
+  if (progress >= STAGE_PROGRESS_POINTS[1]) {
+    return 2;
+  }
+
+  if (progress >= STAGE_PROGRESS_POINTS[0]) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function isTodayDate(dateStr?: string) {
+  if (!dateStr) return false;
+
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+
+  return dateStr === `${year}-${month}-${day}`;
+}
+
+export function AnalysisLoading({
+  instrument = 'piano',
   onRetry,
   onComplete,
-  payload
+  payload,
+  triggerAnalysis = true,
 }: AnalysisLoadingProps) {
-
   const [currentStage, setCurrentStage] = useState(0);
   const [progress, setProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
   const [userCharacterImage, setUserCharacterImage] = useState<string | null>(null);
-  const [Lp, setLp] = useState(null);
-
-  const [isError, setIsError] = useState(false);  // ★ 빠져있던 코드 복구
+  const [isError, setIsError] = useState(false);
+  const [analysisReady, setAnalysisReady] = useState(false);
+  const completionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasRunRef = useRef(false);
   const analysisResultRef = useRef<any>(null);
@@ -70,28 +100,43 @@ export function AnalysisLoading({
   useEffect(() => {
     async function fetchCharacter() {
       try {
-        const res = await api.get("/api/users/profile");
+        const res = await api.get('/api/users/profile');
         const key = res.data.character?.toUpperCase();
         if (key && characterInfo[key]) {
           setUserCharacterImage(characterInfo[key].image);
         }
       } catch (err) {
-        console.error("캐릭터 API 실패:", err);
+        console.error('Character API failed:', err);
       }
     }
-    fetchCharacter();
+
+    void fetchCharacter();
   }, []);
 
   const instrumentInfo = instrumentInfoMap[instrument];
 
   useEffect(() => {
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => Math.min(prev + 2, 100));
-    }, 150);
+    if (analysisReady) {
+      return;
+    }
 
-    const stageInterval = setInterval(() => {
-      setCurrentStage((prev) => Math.min(prev + 1, 2));
-    }, 5000);
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= STAGE_PROGRESS_POINTS[2]) {
+          return STAGE_PROGRESS_POINTS[2];
+        }
+
+        if (prev < STAGE_PROGRESS_POINTS[0]) {
+          return Math.min(prev + 3, STAGE_PROGRESS_POINTS[0]);
+        }
+
+        if (prev < STAGE_PROGRESS_POINTS[1]) {
+          return Math.min(prev + 2, STAGE_PROGRESS_POINTS[1]);
+        }
+
+        return Math.min(prev + 1, STAGE_PROGRESS_POINTS[2]);
+      });
+    }, 150);
 
     const messageInterval = setInterval(() => {
       setMessageIndex((prev) => (prev + 1) % loadingMessages.length);
@@ -99,27 +144,30 @@ export function AnalysisLoading({
 
     return () => {
       clearInterval(progressInterval);
-      clearInterval(stageInterval);
       clearInterval(messageInterval);
     };
-  }, []);
-  
-  async function fetchLP() {
-    try {
-      const lpRes = await api.get("/api/lp/today");
-      setLp(lpRes.data);
-    } catch (err) {
-      console.warn("⚠️ 오늘의 LP 불러오기 실패:", err);
+  }, [analysisReady]);
+
+  useEffect(() => {
+    if (analysisReady) {
+      setCurrentStage(2);
+      return;
     }
-  }
+
+    setCurrentStage(getStageIndexForProgress(progress));
+  }, [analysisReady, progress]);
 
   async function fetchChallenge() {
+    if (!isTodayDate(payload?.date)) {
+      return null;
+    }
+
     try {
-      const res = await api.get("/api/challenge/today");
+      const res = await api.get('/api/challenge/today');
       return res.data;
     } catch (err: any) {
-      if (err.response?.data?.message?.includes("이미 추천")) {
-        const res2 = await api.get("/api/challenge/status");
+      if (err.response?.data?.message?.includes('이미 추천')) {
+        const res2 = await api.get('/api/challenge/status');
         return res2.data.challenge || res2.data;
       }
       return null;
@@ -127,116 +175,97 @@ export function AnalysisLoading({
   }
 
   useEffect(() => {
-    console.log("🟢 [DEBUG] AnalysisLoading 시작");
-    console.log("📦 들어온 payload:", payload);
-  }, [payload]);
-
-  /** ---------------------------
-   *  1) 서버 분석 요청
-   ---------------------------- */
-  useEffect(() => {
     if (!payload?.diaryId || hasRunRef.current) return;
     hasRunRef.current = true;
 
-    async function runAnalysis() {
-      console.log("🔵 [DEBUG] 분석 시작");
-      console.log("🔵 [DEBUG] payload:", payload);
+    let isCancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    async function storeAnalysisResult(raw: any) {
+      const challenge = await fetchChallenge();
+      analysisResultRef.current = mapBackendToFrontend({
+        ...raw,
+        challenge,
+      });
+      setCurrentStage(2);
+      setProgress(100);
+      setAnalysisReady(true);
+    }
+
+    async function fetchAnalysisResult() {
+      const res = await api.get(`/api/analysis/${payload.diaryId}`);
+      await storeAnalysisResult(res.data);
+    }
+
+    async function waitForAnalysisCompletion() {
       try {
-        const res = await api.post("/api/analysis", payload);
-        const challenge = await fetchChallenge();
-        analysisResultRef.current = mapBackendToFrontend({
-          ...res.data,
-          challenge,
-        });
-
-        console.log("🟢 [DEBUG] POST 성공");
-        console.log("🟢 [DEBUG] 전체 응답:", res);
-        console.log("🟢 [DEBUG] 응답 데이터:", res.data);
-
-        if (progress >= 100) {
-          console.log("🟢 [DEBUG] progress 100 → onComplete 호출");
-          onComplete?.(analysisResultRef.current);
-        }
+        await fetchAnalysisResult();
       } catch (err: any) {
-        console.error("🔴 [DEBUG] POST 에러:", err);
+        const status = err.response?.status;
 
-        if (err.response?.status === 409) {
-          console.warn("🟡 [DEBUG] 409 발생 → 기존 분석 결과 GET 요청");
-
-          try {
-            const res2 = await api.get(`/api/analysis/${payload.diaryId}`);
-            const challenge = await fetchChallenge();
-            analysisResultRef.current = mapBackendToFrontend({
-              ...res2.data,
-              challenge,
-            });
-
-            console.log("🟡 [DEBUG] GET 성공");
-            console.log("🟡 [DEBUG] GET 전체 응답:", res2);
-            console.log("🟡 [DEBUG] GET 데이터:", res2.data);
-
-            if (progress >= 100) {
-              console.log("🟡 [DEBUG] progress 100 → onComplete 호출");
-              onComplete?.(analysisResultRef.current);
-            }
-          } catch (getErr) {
-            console.error("🔴 [DEBUG] GET 분석 결과 실패:", getErr);
-            setIsError(true);
-          }
-        } else {
-          console.error("🔴 [DEBUG] 분석 실패 (409 아님):", err);
-          setIsError(true);
+        if ((status === 404 || status === 409) && !isCancelled) {
+          retryTimer = setTimeout(() => {
+            void waitForAnalysisCompletion();
+          }, 1500);
+          return;
         }
+
+        console.error('Analysis status polling failed:', err);
+        setIsError(true);
       }
     }
 
-    runAnalysis();
-  }, [payload, progress, onComplete]);
+    async function runAnalysis() {
+      try {
+        if (triggerAnalysis) {
+          const res = await api.post('/api/analysis', payload);
+          if (hasAnalysisFields(res.data)) {
+            await storeAnalysisResult(res.data);
+            return;
+          }
+        }
 
+        await waitForAnalysisCompletion();
+      } catch (err: any) {
+        const status = err.response?.status;
 
-  /** ---------------------------
-   * 2) progress 증가 (0 → 100)
-   ---------------------------- */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress(p => Math.min(p + 2, 100));
-    }, 150);
-    return () => clearInterval(timer);
-  }, []);
+        if (status === 403 || status === 409) {
+          await waitForAnalysisCompletion();
+          return;
+        }
 
-
-  /** ---------------------------
-   * 3) Stage 진행도 업데이트
-   ---------------------------- */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentStage(s => Math.min(s + 1, 2));
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
-
-  /** ---------------------------
-   * 4) 메시지 변경
-   ---------------------------- */
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setMessageIndex(i => (i + 1) % loadingMessages.length);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-
-  /** ---------------------------
-   * 5) 서버 결과 + progress 100 둘 다 되면 완료
-   ---------------------------- */
-  useEffect(() => {
-    if (progress === 100 && analysisResultRef.current) {
-      onComplete?.(analysisResultRef.current);
+        console.error('Analysis request failed:', err);
+        setIsError(true);
+      }
     }
-  }, [progress, onComplete]);
 
+    void runAnalysis();
+
+    return () => {
+      isCancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [payload, triggerAnalysis]);
+
+  useEffect(() => {
+    if (progress === 100 && analysisReady && analysisResultRef.current) {
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+      }
+
+      completionTimerRef.current = setTimeout(() => {
+        onComplete?.(analysisResultRef.current);
+      }, 250);
+    }
+    return () => {
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+        completionTimerRef.current = null;
+      }
+    };
+  }, [analysisReady, progress, onComplete]);
 
   if (isError) {
     return (
@@ -250,73 +279,38 @@ export function AnalysisLoading({
   return (
     <div className="min-h-screen bg-[#F5F1E8] flex flex-col items-center justify-center p-6">
       <div className="max-w-md w-full">
-        {/* Header */}
         <div className="text-center mb-12">
-          <p className="text-[#7B8B4F] mb-2">
-            AI가 당신의 하루를 해석하는 중이에요.
-          </p>
-          <h1 className="text-[#4A3228]">
-            감성분석 중…
-          </h1>
+          <p className="text-[#7B8B4F] mb-2">AI가 당신의 하루를 해석하는 중이에요.</p>
+          <h1 className="text-[#4A3228]">감성분석 중...</h1>
         </div>
 
-        {/* Animated Character */}
         <div className="flex justify-center mb-12">
           <motion.div
-            animate={{
-              scale: [1, 1.1, 1],
-              rotate: [0, 5, -5, 0],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
+            animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             className="relative"
           >
-            {/* Character Circle */}
             <div className="w-40 h-40 rounded-full bg-white shadow-lg flex items-center justify-center relative overflow-hidden">
               {userCharacterImage ? (
-                <img 
-                  src={userCharacterImage}
-                  alt="캐릭터" 
-                  className="w-28 h-28 object-contain z-10"
-                />
+                <img src={userCharacterImage} alt="캐릭터" className="w-28 h-28 object-contain z-10" />
               ) : (
-                <img src={instrumentInfo.image}  className="w-20 h-20 text-[#7B8B4F] z-10" />
+                <img src={instrumentInfo.image} alt={instrumentInfo.name} className="w-20 h-20 text-[#7B8B4F] z-10" />
               )}
-              
-              {/* Animated Waves */}
+
               <motion.div
-                animate={{
-                  scale: [1, 1.5, 1],
-                  opacity: [0.3, 0.1, 0.3],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0.1, 0.3] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                 className="absolute inset-0 rounded-full border-4 border-[#7B8B4F]"
               />
               <motion.div
-                animate={{
-                  scale: [1, 1.5, 1],
-                  opacity: [0.2, 0, 0.2],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: 0.5,
-                }}
+                animate={{ scale: [1, 1.5, 1], opacity: [0.2, 0, 0.2] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
                 className="absolute inset-0 rounded-full border-4 border-[#7B8B4F]"
               />
             </div>
           </motion.div>
         </div>
 
-        {/* Loading Message */}
         <motion.p
           key={messageIndex}
           initial={{ opacity: 0, y: 10 }}
@@ -327,23 +321,17 @@ export function AnalysisLoading({
           {loadingMessages[messageIndex]}
         </motion.p>
 
-        {/* Progress Bar */}
         <div className="mb-6">
           <Progress value={progress} className="h-2" />
-          <p className="text-center text-[#7B8B4F] mt-2">
-            {progress}%
-          </p>
+          <p className="text-center text-[#7B8B4F] mt-2">{progress}%</p>
         </div>
 
-        {/* Stage Indicators */}
         <div className="space-y-3">
           {stages.map((stage, index) => (
             <motion.div
               key={stage.stage}
               initial={{ opacity: 0.3 }}
-              animate={{
-                opacity: index <= currentStage ? 1 : 0.3,
-              }}
+              animate={{ opacity: index <= currentStage ? 1 : 0.3 }}
               className="flex items-center gap-3"
             >
               <div
@@ -351,8 +339,8 @@ export function AnalysisLoading({
                   index < currentStage
                     ? 'bg-[#7B8B4F]'
                     : index === currentStage
-                    ? 'bg-[#7B8B4F] animate-pulse'
-                    : 'bg-[#E5E5E5]'
+                      ? 'bg-[#7B8B4F] animate-pulse'
+                      : 'bg-[#E5E5E5]'
                 }`}
               >
                 {index < currentStage && (
@@ -373,7 +361,7 @@ export function AnalysisLoading({
                   </motion.svg>
                 )}
               </div>
-              <span className={`${index <= currentStage ? 'text-[#4A3228]' : 'text-[#999999]'}`}>
+              <span className={index <= currentStage ? 'text-[#4A3228]' : 'text-[#999999]'}>
                 {stage.label}
               </span>
             </motion.div>

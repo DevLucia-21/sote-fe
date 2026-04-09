@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import api from '../../services/api'
 import { motion } from 'motion/react';
 import { ArrowLeft, FileText, Mic, Pencil, Image, Trash2 } from 'lucide-react';
@@ -119,7 +119,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
 
   async function fetchChallenge() {
     try {
-      // 오늘 이미 추천되었으면 여기서 받아짐
       const res = await api.get("/api/challenge/status");
       return res.data.challenge || res.data;
     } catch (err) {
@@ -135,7 +134,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
 
         const fetchUserProfile = async () => {
           const res = await api.get("/api/users/profile");
-          return res.data; // { character: "MARIMBA", ... }
+          return res.data;
         };
 
         const loadProfile = async () => {
@@ -148,7 +147,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         };
         loadProfile();
 
-        // 1) 일기 상세
         const diaryData = diary.id && diary.content ? diary : await fetchDiaryByDate(diary.date);
         if (!diaryData?.id) {
           throw new Error(`일기 상세를 찾을 수 없습니다: ${diary.date}`);
@@ -157,7 +155,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         setDiaryData(diaryData);
         console.log("일기 상세", diaryData)
 
-        // 2) 분석 데이터 가져오기
         let analysisRes;
         try {
           analysisRes = await api.get(`/api/analysis/${diaryData.id}`);
@@ -176,16 +173,19 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
 
         let coverUrl = raw.selectedTrackCoverImageUrl;
 
-        // LP 목록에서 보정하기
         if (!coverUrl) {
           try {
-            const lpRes = await api.get("/api/lp/list");  // 🔥 허용된 API
+            const rewardDate = new Date(diaryData.date);
+            const lpRes = await api.get("/api/lp/monthly", {
+              params: { year: rewardDate.getFullYear(), month: rewardDate.getMonth() + 1 }
+            });
+            const diaryDateKey = (diaryData.date || '').split("T")[0];
             const reward = lpRes.data.find(
-              (item: any) => (item.rewardDate || '').split("T")[0] === diaryData.date
+              (item: any) => (item.rewardDate || '').split("T")[0] === diaryDateKey
             );
 
-            if (reward?.albumImageUrl) {
-              coverUrl = reward.albumImageUrl;
+            if (reward?.albumImageUrl || reward?.imageUrl) {
+              coverUrl = reward.albumImageUrl || reward.imageUrl;
               console.log("🎉 LP 목록에서 이미지 보정됨:", coverUrl);
             }
           } catch (e) {
@@ -193,14 +193,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           }
         }
 
-        // 🔥 3) MusicCard 데이터 구성
         const musicData = {
           title: raw.selectedTrackTitle,
           artist: raw.selectedTrackArtist,
           genre: raw.selectedTrackGenre,
           reason: raw.selectedTrackReason,
           album: raw.selectedTrackAlbum,
-          coverImageUrl: coverUrl, // ✨ 최종 보정된 URL
+          coverImageUrl: coverUrl,
         };
 
         const challenge = await fetchChallenge();
@@ -209,9 +208,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
               title: challenge.category,
               content: challenge.content,
               emotion: challenge.emotionType,
-              difficulty: challenge.category || "easy", // 백엔드에 난이도 없음 → category 사용 또는 기본값
-              duration: "5분",  // 백엔드에 duration 없음 → 기본값
-              icon: "✨",        // 백엔드에 아이콘 없음 → 기본값
+              difficulty: challenge.category || "easy",
+              duration: "5분",
+              icon: "✨",
             }
           : null;
 
@@ -302,7 +301,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   
   return (
     <div className="fixed inset-x-0 top-0 bottom-0 bg-background z-40 overflow-y-auto pb-24">
-      {/* Header */}
       <div className="bg-card shadow-sm sticky top-0 z-50 border-b border-border">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center">
           <Button variant="ghost" onClick={onBack} className="text-foreground -ml-2">
@@ -321,9 +319,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         </div>
       </div>
 
-      {/* Content */}
       <div className="max-w-2xl mx-auto px-6 py-8">
-        {/* Date */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -340,7 +336,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
         </motion.div>
 
         <div className="space-y-6">
-          {/* Card 1: Diary Content */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -373,7 +368,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
                 </div>
               </div>
               
-              {/* Keywords - 이지모드에서 제거 */}
               {!isEasyMode && detailDiary.keywords && detailDiary.keywords.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm mb-2 text-primary">키워드</p>
@@ -394,7 +388,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
                 </div>
               )}
 
-              {/* Diary Content */}
               {detailDiary.content && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -419,7 +412,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             </Card>
           </motion.div>
 
-          {/* Card 2: Emotion Summary */}
           <EmotionCard
             emotion={analysisData.emotion}
             confidence={analysisData.confidence}
@@ -429,7 +421,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             characterType={userCharacter}
           />
 
-          {/* Card 3: Music Recommendation - 이지모드에서 제거 */}
           {!isEasyMode && analysisData.music && (
             <MusicCard
               title={analysisData.music.title}
@@ -442,7 +433,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             />
           )}
 
-          {/* Card 4: Challenge - 당일 작성한 일기만 표시, 이지모드에서 제거 */}
           {!isEasyMode &&
             analysisData.challenge &&
             isToday(detailDiary.date) && (
@@ -458,13 +448,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
       {isImageOpen && detailDiary.imageUrl && (
         <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={() => setIsImageOpen(false)}  // 바깥 클릭 → 닫기
+          onClick={() => setIsImageOpen(false)}
         >
           <img
             src={detailDiary.imageUrl}
             alt="full"
             className="rounded-lg shadow-lg object-contain w-[280px] h-auto"
-            onClick={(e) => e.stopPropagation()} // 이미지 클릭 시 닫힘 방지
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
