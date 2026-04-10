@@ -11,6 +11,8 @@ import { MusicCard } from '../analysis/MusicCard';
 import { ChallengeCard } from '../analysis/ChallengeCard';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import { CharacterType } from '../common/characterImages';
+import { markDeletedDiaryAnalysisWarning } from '../../utils/deletedDiaryAnalysisWarning';
+import { hasRewrittenDiaryStatus } from '../../utils/rewrittenDiaryStatus';
 import {
   Dialog,
   DialogContent,
@@ -23,11 +25,12 @@ interface DiaryDetailViewProps {
   diary: DiaryEntry;
   onBack: () => void;
   onEdit?: () => void;
+  onDelete?: (date: string) => void;
   isEasyMode?: boolean;
   characterType?: CharacterType;
 }
 
-export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterType }: DiaryDetailViewProps) {
+export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, characterType }: DiaryDetailViewProps) {
   const [diaryData, setDiaryData] = useState<DiaryEntry | null>(null);
   const [analysisData, setAnalysisData] = useState<AnalysisResultType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,6 +92,17 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   };
 
   const createFallbackAnalysisData = (diaryData: any): AnalysisResultType => {
+    if (hasRewrittenDiaryStatus(diaryData.date) || diaryData.analysisDisabled) {
+      return {
+        id: `rewritten-${diaryData.id ?? diaryData.date}`,
+        date: diaryData.date,
+        emotion: "기쁨",
+        confidence: 0,
+        reason: "재작성으로 분석 결과가 없습니다.",
+        description: "재작성한 일기는 저장만 되고 감정 분석, 음악 추천, 챌린지 추천은 표시되지 않아요.",
+      } as AnalysisResultType;
+    }
+
     const emotionMap: Record<string, any> = {
       JOY: "기쁨",
       SADNESS: "슬픔",
@@ -154,6 +168,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
 
         setDiaryData(diaryData);
         console.log("일기 상세", diaryData)
+
+        const isRewrittenDiary = hasRewrittenDiaryStatus(diaryData.date) || diaryData.analysisDisabled;
+
+        if (isRewrittenDiary) {
+          setAnalysisData(createFallbackAnalysisData(diaryData));
+          return;
+        }
 
         let analysisRes;
         try {
@@ -239,7 +260,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
     try {
       setIsDeleting(true);
       await api.delete("/api/diaries", { params: { date: diary.date } });
+      markDeletedDiaryAnalysisWarning(diary.date);
       setDeleteOpen(false);
+      onDelete?.(diary.date);
       onBack?.();
     } catch (err) {
       console.error("❌ 일기 삭제 실패:", err);
@@ -253,7 +276,8 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
   }
 
   const detailDiary = diaryData;
-  const color = emotionColors[analysisData.emotion];
+  const color = emotionColors[analysisData.emotion] || '#7B8B4F';
+  const isRewrittenDiary = hasRewrittenDiaryStatus(detailDiary.date) || !!detailDiary.analysisDisabled;
   
   const getWriteTypeIcon = () => {
     switch (detailDiary.writeType) {
@@ -400,7 +424,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
                         className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
                       >
                         <Pencil className="w-3.5 h-3.5 mr-1" />
-                        재작성
+                        수정
                       </Button>
                     )}
                   </div>
@@ -412,16 +436,18 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
             </Card>
           </motion.div>
 
-          <EmotionCard
-            emotion={analysisData.emotion}
-            confidence={analysisData.confidence}
-            reason={analysisData.reason}
-            description={analysisData.description}
-            instrument="piano"
-            characterType={userCharacter}
-          />
+          {!isRewrittenDiary && (
+            <EmotionCard
+              emotion={analysisData.emotion}
+              confidence={analysisData.confidence}
+              reason={analysisData.reason}
+              description={analysisData.description}
+              instrument="piano"
+              characterType={userCharacter}
+            />
+          )}
 
-          {!isEasyMode && analysisData.music && (
+          {!isEasyMode && !isRewrittenDiary && analysisData.music && (
             <MusicCard
               title={analysisData.music.title}
               artist={analysisData.music.artist}
@@ -434,6 +460,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           )}
 
           {!isEasyMode &&
+            !isRewrittenDiary &&
             analysisData.challenge &&
             isToday(detailDiary.date) && (
             <ChallengeCard
@@ -464,7 +491,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, isEasyMode, characterTy
           <DialogHeader>
             <DialogTitle className="text-center">일기를 삭제할까요?</DialogTitle>
             <DialogDescription className="text-center">
-              삭제 후에는 되돌릴 수 없어요.
+              삭제 후에도 일기는 다시 작성할 수 있지만,
+              <br />
+              재작성한 일기는 감정 분석이 불가능해요.
             </DialogDescription>
           </DialogHeader>
 

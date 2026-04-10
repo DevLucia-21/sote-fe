@@ -12,6 +12,7 @@ export interface DiaryEntry {
   emotion: EmotionType;
   score: number; // 1-5
   note: NoteType;
+  analysisDisabled?: boolean;
   content?: string;
   keywords?: string[];
   writeType?: WriteType;

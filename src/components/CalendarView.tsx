@@ -18,6 +18,8 @@ import { emotionColors, getEmotionLabel, getNote } from './calendar/noteMapping'
 import { DiaryEntry, NoteType } from './calendar/types';
 import { DiaryWrite } from './diary/DiaryWrite';
 import { toast } from 'sonner';
+import { hasDeletedDiaryAnalysisWarning } from '../utils/deletedDiaryAnalysisWarning';
+import { hasRewrittenDiaryStatus } from '../utils/rewrittenDiaryStatus';
 
 interface CalendarViewProps {
   onNavigateToSettings?: () => void;
@@ -71,6 +73,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
   const [selectedDateForWrite, setSelectedDateForWrite] = useState<string>('');
   const [editMode, setEditMode] = useState(false);
   const [editingDiary, setEditingDiary] = useState<DiaryEntry | null>(null);
+  const [disableAnalysisForWrite, setDisableAnalysisForWrite] = useState(false);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
 
   const year = currentDate.getFullYear();
@@ -146,12 +149,14 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
   const normalizeDiary = (diary: any, fallbackDate?: string) => {
     const date = diary.date || diary.diaryDate || fallbackDate || '';
+    const normalizedDate = date.split("T")[0];
 
     return {
       ...diary,
-      date: date.split("T")[0],
+      date: normalizedDate,
       emotion: diary.emotion || emotionMap[diary.emotionLabel] || emotionMap[diary.emotionType] || "APATHY",
       contentLength: diary.contentLength || diary.content?.length || 0,
+      analysisDisabled: hasRewrittenDiaryStatus(normalizedDate),
     };
   };
 
@@ -219,11 +224,25 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     setEditingDiary(null);
   };
 
+  const handleDiaryDelete = (dateStr: string) => {
+    setMonthNotes((prev) => {
+      const next = { ...prev };
+      delete next[dateStr];
+      return next;
+    });
+    setSelectedDiary(null);
+    setEditMode(false);
+    setEditingDiary(null);
+    setDisableAnalysisForWrite(false);
+    setCalendarRefreshKey((prev) => prev + 1);
+  };
+
   // 일기 수정 시작
   const handleEdit = () => {
     if (selectedDiary) {
       setEditingDiary(selectedDiary);
       setEditMode(true);
+      setDisableAnalysisForWrite(false);
       setSelectedDiary(null);
       setSelectedDateForWrite(selectedDiary.date);
       setIsWriteDialogOpen(true);
@@ -237,6 +256,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       toast.error('이미 일기가 작성된 날짜입니다.');
       return;
     }
+    setDisableAnalysisForWrite(hasDeletedDiaryAnalysisWarning(dateStr));
     setSelectedDateForWrite(dateStr);
     setIsWriteDialogOpen(true);
   };
@@ -265,7 +285,18 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     setSelectedDateForWrite('');
     setEditMode(false);
     setEditingDiary(null);
+    setDisableAnalysisForWrite(false);
     setCalendarRefreshKey((prev) => prev + 1);
+    if (optimisticDiary && savedDate) {
+      setMonthNotes((prev) => ({
+        ...prev,
+        [savedDate]: {
+          ...prev[savedDate],
+          ...optimisticDiary,
+          contentLength: optimisticDiary.content?.length ?? optimisticDiary.contentLength ?? 0,
+        },
+      }));
+    }
     if (createdDiary && savedDate) {
       setMonthNotes((prev) => ({
         ...prev,
@@ -306,6 +337,8 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
   useEffect(() => {
     const fetchNotes = async () => {
       try {
+        const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        const monthEnd = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
         const currentRes = await api.get(`/api/calendar-notes/${year}/${month + 1}`);
 
         const prevMonth = month + 1 === 1 ? 12 : month;
@@ -314,9 +347,10 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
         const nextMonth = month + 1 === 12 ? 1 : month + 2;
         const nextYear = month + 1 === 12 ? year + 1 : year;
 
-        const [prevRes, nextRes] = await Promise.all([
+        const [prevRes, nextRes, monthDiariesRes] = await Promise.all([
           api.get(`/api/calendar-notes/${prevYear}/${prevMonth}`),
-          api.get(`/api/calendar-notes/${nextYear}/${nextMonth}`)
+          api.get(`/api/calendar-notes/${nextYear}/${nextMonth}`),
+          api.get('/api/diaries', { params: { from: monthStart, to: monthEnd } }),
         ]);
 
         const all = [...prevRes.data, ...currentRes.data, ...nextRes.data];
@@ -339,7 +373,23 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           map[dateStr] = {
             ...n,
             emotion: emotionMap[n.emotionLabel] || 'APATHY',
-            contentLength: 0   // 일단 0 (추후 상세 조회에서 채움)
+            contentLength: 0,   // 일단 0 (추후 상세 조회에서 채움)
+            analysisDisabled: hasRewrittenDiaryStatus(dateStr),
+          };
+        });
+
+        const monthDiaries = Array.isArray(monthDiariesRes.data) ? monthDiariesRes.data : [];
+        monthDiaries.forEach((diary) => {
+          const normalizedDiary = normalizeDiary(diary);
+          const dateStr = normalizedDiary.date;
+
+          if (!dateStr) return;
+
+          map[dateStr] = {
+            ...map[dateStr],
+            ...normalizedDiary,
+            contentLength: normalizedDiary.content?.length ?? normalizedDiary.contentLength ?? 0,
+            analysisDisabled: hasRewrittenDiaryStatus(dateStr),
           };
         });
 
@@ -499,7 +549,15 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       }
     }
     
-    return <DiaryDetailView diary={selectedDiary} onBack={handleBack} onEdit={handleEdit} characterType={characterType} />;
+    return (
+      <DiaryDetailView
+        diary={selectedDiary}
+        onBack={handleBack}
+        onEdit={handleEdit}
+        onDelete={handleDiaryDelete}
+        characterType={characterType}
+      />
+    );
   }
 
   return (
@@ -722,10 +780,14 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           <DiaryWrite
             key={`${selectedDateForWrite}-${editMode ? editingDiary?.id ?? 'edit' : 'new'}`}
             date={selectedDateForWrite}
-            onBack={() => setIsWriteDialogOpen(false)}
+            onBack={() => {
+              setIsWriteDialogOpen(false);
+              setDisableAnalysisForWrite(false);
+            }}
             onSave={handleDiarySave}
             editMode={editMode}
             editingDiary={editingDiary}
+            disableAnalysis={disableAnalysisForWrite}
           />
         </DialogContent>
       </Dialog>

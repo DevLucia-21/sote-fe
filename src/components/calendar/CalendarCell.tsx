@@ -2,6 +2,7 @@ import React from 'react';
 import { StaffLines } from './StaffLines';
 import { NoteHead } from './NoteHead';
 import { QuarterRest } from './QuarterRest';
+import { NaturalSignImage } from './NaturalSignImage';
 import { DiaryEntry } from './types';
 
 interface CalendarCellProps {
@@ -71,7 +72,7 @@ export function CalendarCell({ day, isEmpty = false, diaryEntry, isPastDate = fa
       </span>
       
       {/* Note head (only if diary entry exists) */}
-      {hasEntry && diaryEntry && (
+      {hasEntry && diaryEntry && !diaryEntry.analysisDisabled && (
         <NoteHead
           note={diaryEntry.note}
           emotion={diaryEntry.emotion}
@@ -80,6 +81,15 @@ export function CalendarCell({ day, isEmpty = false, diaryEntry, isPastDate = fa
           onClick={handleClick}
           size={noteSize}
         />
+      )}
+
+      {hasEntry && diaryEntry?.analysisDisabled && (
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20"
+          title="재작성된 일기"
+        >
+          <NaturalSignImage />
+        </div>
       )}
 
       {/* Quarter rest (only if no entry and is past date) */}

@@ -13,6 +13,15 @@ import { addDiaryEntry, mockDiaryData } from '../calendar/mockData';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import {
+  clearDeletedDiaryAnalysisWarning,
+  hasDeletedDiaryAnalysisWarning,
+  normalizeDiaryDateKey,
+} from '../../utils/deletedDiaryAnalysisWarning';
+import {
+  clearRewrittenDiaryStatus,
+  markDiaryAsRewritten,
+} from '../../utils/rewrittenDiaryStatus';
+import {
   ArrowLeft,
   Type,
   Mic,
@@ -38,6 +47,7 @@ interface DiaryWriteProps {
   date?: string; // YYYY-MM-DD format
   editMode?: boolean;
   isEasyMode?: boolean;
+  disableAnalysis?: boolean;
 }
 
 const reverseEmotionMap: Record<string, EmotionType> = {
@@ -69,7 +79,7 @@ const formatDateLocal = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWriteType, date: initialDate, editMode, isEasyMode }: DiaryWriteProps) {
+export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWriteType, date: initialDate, editMode, isEasyMode, disableAnalysis = false }: DiaryWriteProps) {
   const [writeType, setWriteType] = useState<WriteType>(initialWriteType || editingDiary?.writeType || 'TEXT');
   const [date, setDate] = useState<Date>(
     initialDate 
@@ -97,6 +107,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   const [sttStatus, setSttStatus] = useState<'idle' | 'recording' | 'processing' | 'success' | 'error'>('idle');
   const [ocrStatus, setOcrStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [showMinLengthDialog, setShowMinLengthDialog] = useState(false);
+  const [showDeletedAnalysisWarningDialog, setShowDeletedAnalysisWarningDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [, setAnalysisResult] = useState<AnalysisResultType | null>(null);
@@ -118,6 +129,8 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const MINIMUM_LENGTH = 10;
+  const initialContent = editingDiary?.content?.trim() ?? '';
+  const hasEditedContent = content.trim() !== initialContent;
 
   // Generate date options (오늘부터 30일 전까지)
   const dateOptions = Array.from({ length: 30 }, (_, i) => {
@@ -147,6 +160,13 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     );
   }, [initialDate, editingDiary?.date]);
 
+  useEffect(() => {
+    if (editMode || editingDiary) return;
+
+    const targetDate = normalizeDiaryDateKey(initialDate || formatDateLocal(date));
+    setShowDeletedAnalysisWarningDialog(hasDeletedDiaryAnalysisWarning(targetDate));
+  }, [date, editMode, editingDiary, initialDate]);
+
   // Helper function to check if diary exists for a date
   const getDiaryByDate = (dateStr: string) => {
     return mockDiaryData.find(d => d.date === dateStr);
@@ -154,6 +174,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
   const isFormValid = () => {
     if (!content.trim() || content.trim().length < 10) return false;
+    if (editMode && editingDiary && !hasEditedContent) return false;
     // 키워드는 선택 사항
     return true;
   };
@@ -502,6 +523,10 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   };
 
   const handleSave = async () => {
+    if (editMode && editingDiary && !hasEditedContent) {
+      return;
+    }
+
     if (!content.trim()) {
       toast.error("일기 내용을 입력해주세요.");
       return;
@@ -525,12 +550,20 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       console.groupEnd();
 
       try {
+        setPendingAnalysisPayload(null);
+        setSavedDiaryForAnalysis(null);
+        setAnalysisAttempt(0);
+        setIsAnalyzing(false);
         setIsSaving(true);
         const res = await api.put("/api/diaries", editPayload);
+        clearRewrittenDiaryStatus(editPayload.date);
 
-        setIsSaving(false);
         toast.success("일기가 수정되었습니다!");
-        await onSave?.(res.data);
+        await onSave?.({
+          ...res.data,
+          date: editPayload.date,
+          content: editPayload.content,
+        });
       } catch (e) {
         console.error("일기 수정 실패:", e);
         toast.error("일기 수정 중 문제가 발생했습니다.");
@@ -574,7 +607,9 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     console.log("🔍 editingDiary.keywords:", editingDiary?.keywords);
 
     try {
-      if (!isEasyMode) {
+      const isDeletedRewrite = disableAnalysis || hasDeletedDiaryAnalysisWarning(payload.date);
+
+      if (!isEasyMode && !isDeletedRewrite) {
         setPendingAnalysisPayload({ date: payload.date });
         setIsAnalyzing(true);
       }
@@ -619,10 +654,18 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         date: payload.date,
         content: payload.content,
         writeType,
+        analysisDisabled: isDeletedRewrite,
       };
       const savedDiaryId = savedDiary.id ?? (savedDiary as any).diaryId;
+      clearDeletedDiaryAnalysisWarning(payload.date);
 
-      if (!isEasyMode && savedDiaryId) {
+      if (isDeletedRewrite) {
+        markDiaryAsRewritten(payload.date);
+      } else {
+        clearRewrittenDiaryStatus(payload.date);
+      }
+
+      if (!isEasyMode && !isDeletedRewrite && savedDiaryId) {
         setSavedDiaryForAnalysis(savedDiary);
         setPendingAnalysisPayload({
           diaryId: savedDiaryId,
@@ -645,7 +688,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     }
   };
 
-  if (isAnalyzing && pendingAnalysisPayload && !isEasyMode) {
+  if (isAnalyzing && pendingAnalysisPayload && !isEasyMode && !editMode && !editingDiary) {
     return (
       <AnalysisLoading
         key={`analysis-${pendingAnalysisPayload.diaryId ?? 'pending'}-${analysisAttempt}`}
@@ -1093,6 +1136,38 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
           </CardContent>
         </Card>
       )}
+
+      {/* 최소 글자 수 미달 다이얼로그 */}
+      <Dialog
+        open={showDeletedAnalysisWarningDialog}
+        onOpenChange={setShowDeletedAnalysisWarningDialog}
+      >
+        <DialogContent className="border-border">
+          <DialogHeader>
+            <div className="flex justify-center mb-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center bg-yellow-50 dark:bg-yellow-950/20">
+                <AlertCircle className="w-6 h-6 text-yellow-500" />
+              </div>
+            </div>
+            <DialogTitle className="text-center text-foreground">
+              감정 분석 안내
+            </DialogTitle>
+            <DialogDescription className="text-center text-muted-foreground">
+              삭제 후 일기를 재작성하는 경우 감정 분석이 불가능해요.
+              <br />
+              일기 작성과 저장은 가능하지만 분석만 진행되지 않아요.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => setShowDeletedAnalysisWarningDialog(false)}
+              className="w-full bg-primary text-white hover:bg-primary/90"
+            >
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 최소 글자 수 미달 다이얼로그 */}
       <Dialog open={showMinLengthDialog} onOpenChange={setShowMinLengthDialog}>

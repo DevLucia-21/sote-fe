@@ -17,6 +17,25 @@ import {
 import { toast } from 'sonner@2.0.3';
 
 type ViewMode = 'main' | 'badges' | 'lp-reward' | 'monthly-challenge';
+const CHALLENGE_PROGRESS_STORAGE_KEY = 'challenge-progress';
+
+function getTodayDateKey() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getProgressStorageKey(challengeId: number | string) {
+  return `${CHALLENGE_PROGRESS_STORAGE_KEY}:${getTodayDateKey()}:${challengeId}`;
+}
+
+function readStoredProgress(challengeId: number | string) {
+  const raw = localStorage.getItem(getProgressStorageKey(challengeId));
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  if (Number.isNaN(parsed)) return null;
+
+  return Math.max(0, Math.min(100, parsed));
+}
 
 export function ChallengeView() {
   const [currentView, setCurrentView] = useState<ViewMode>('main');
@@ -36,6 +55,9 @@ export function ChallengeView() {
         if (res.data.completed) {
           setProgress(100);
           setIsCompleted(true);
+        } else if (res.data.challengeId) {
+          const savedProgress = readStoredProgress(res.data.challengeId);
+          setProgress(savedProgress ?? 0);
         }
       } catch (e) {
         toast.error('오늘의 챌린지를 가져오지 못했어요.');
@@ -45,6 +67,15 @@ export function ChallengeView() {
     };
     fetchTodayChallenge();
   }, []);
+
+  useEffect(() => {
+    if (!todayChallenge?.challengeId || isCompleted) return;
+
+    localStorage.setItem(
+      getProgressStorageKey(todayChallenge.challengeId),
+      String(progress),
+    );
+  }, [todayChallenge?.challengeId, progress, isCompleted]);
 
   if (loading) {
     return (
@@ -68,6 +99,7 @@ export function ChallengeView() {
 
       setProgress(100);
       setIsCompleted(true);
+      localStorage.setItem(getProgressStorageKey(todayChallenge.challengeId), '100');
 
       const reward = res.data.reward;
       if (reward) {

@@ -35,6 +35,7 @@ import { ko } from 'date-fns/locale';
 import { getEmotionCharacterImage, CharacterType, EmotionType as EmotionAPIType } from '../common/characterImages';
 import { useAuth } from '../../contexts/AuthContext';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { markDeletedDiaryAnalysisWarning } from '../../utils/deletedDiaryAnalysisWarning';
 
 interface DiaryDetailProps {
   diary: Diary;
@@ -69,6 +70,7 @@ export function DiaryDetail({
 
   const handleDelete = () => {
     toast.success('일기가 삭제되었습니다.');
+    markDeletedDiaryAnalysisWarning(diary.date);
     onDelete?.(diary.id);
   };
 
