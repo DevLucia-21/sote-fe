@@ -58,6 +58,30 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     return undefined;
   };
 
+  const hasAnalysisFields = (raw: any) => {
+    return Boolean(raw?.emotionLabel || raw?.emotionReason || raw?.selectedTrackTitle || raw?.selectedTrackArtist);
+  };
+
+  const isAnalysisPendingResponse = (raw: any) => {
+    if (raw == null) {
+      return true;
+    }
+
+    if (typeof raw === 'string') {
+      return raw.trim().length === 0;
+    }
+
+    if (Array.isArray(raw)) {
+      return raw.length === 0;
+    }
+
+    if (typeof raw === 'object') {
+      return Object.keys(raw).length === 0 || !hasAnalysisFields(raw);
+    }
+
+    return false;
+  };
+
   const fetchDiaryByDate = async (dateStr: string) => {
     const findDiaryForDate = (data: any) => {
       if (Array.isArray(data)) {
@@ -176,11 +200,38 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           return;
         }
 
-        let analysisRes;
+        const fetchAnalysisWithRetry = async (diaryId: number, retries = 6, delayMs = 1500) => {
+          for (let attempt = 0; attempt <= retries; attempt += 1) {
+            try {
+              const res = await api.get(`/api/analysis/${diaryId}`);
+
+              if (isAnalysisPendingResponse(res.data)) {
+                throw Object.assign(new Error("Analysis result is empty"), {
+                  response: { status: 409 },
+                });
+              }
+
+              return res.data;
+            } catch (error) {
+              const status = getErrorStatus(error);
+              const isRetryable = status === 404 || status === 409;
+
+              if (!isRetryable || attempt === retries) {
+                throw error;
+              }
+
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
+            }
+          }
+
+          return null;
+        };
+
+        let raw;
         try {
-          analysisRes = await api.get(`/api/analysis/${diaryData.id}`);
+          raw = await fetchAnalysisWithRetry(diaryData.id);
         } catch (error) {
-          if (getErrorStatus(error) === 404) {
+          if (getErrorStatus(error) === 404 || getErrorStatus(error) === 409) {
             console.warn("분석 결과가 아직 없어 기본 정보로 상세를 표시합니다:", diaryData.id);
             setAnalysisData(createFallbackAnalysisData(diaryData));
             return;
@@ -189,7 +240,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           throw error;
         }
 
-        const raw = analysisRes.data;
         console.log("🔥🔥 [Analysis Raw Response]", JSON.stringify(raw, null, 2));
 
         let coverUrl = raw.selectedTrackCoverImageUrl;

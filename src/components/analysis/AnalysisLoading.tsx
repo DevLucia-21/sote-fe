@@ -56,6 +56,26 @@ function hasAnalysisFields(raw: any) {
   return Boolean(raw?.emotionLabel || raw?.emotionReason || raw?.selectedTrackTitle || raw?.selectedTrackArtist);
 }
 
+function isAnalysisPendingResponse(raw: any) {
+  if (raw == null) {
+    return true;
+  }
+
+  if (typeof raw === 'string') {
+    return raw.trim().length === 0;
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.length === 0;
+  }
+
+  if (typeof raw === 'object') {
+    return Object.keys(raw).length === 0 || !hasAnalysisFields(raw);
+  }
+
+  return false;
+}
+
 function getStageIndexForProgress(progress: number) {
   if (progress >= STAGE_PROGRESS_POINTS[1]) {
     return 2;
@@ -191,6 +211,11 @@ export function AnalysisLoading({
 
     async function fetchAnalysisResult() {
       const res = await api.get(`/api/analysis/${payload.diaryId}`);
+      if (isAnalysisPendingResponse(res.data)) {
+        const pendingError = new Error('Analysis result is not ready yet.');
+        (pendingError as Error & { response?: { status: number } }).response = { status: 409 };
+        throw pendingError;
+      }
       await storeAnalysisResult(res.data);
     }
 
