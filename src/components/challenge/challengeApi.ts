@@ -70,17 +70,12 @@ export async function resolveTodayChallengeFlow(): Promise<ResolvedChallenge | n
 
 export async function resolveChallengeViewFlow(): Promise<ResolvedChallenge | null> {
   const statusChallenge = await fetchChallengeStatus();
-
-  if (statusChallenge.recommended && hasResolvedChallenge(statusChallenge)) {
+  if (hasResolvedChallenge(statusChallenge)) {
     return statusChallenge;
   }
 
-  const todayChallenge = await fetchChallengeToday();
+  await fetchChallengeToday(); // 저장 트리거
   const refreshedStatus = await fetchChallengeStatus();
 
-  if (hasResolvedChallenge(refreshedStatus)) {
-    return refreshedStatus;
-  }
-
-  return hasResolvedChallenge(todayChallenge) ? todayChallenge : null;
+  return hasResolvedChallenge(refreshedStatus) ? refreshedStatus : null;
 }

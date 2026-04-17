@@ -23,13 +23,13 @@ const stages: { stage: AnalysisStage; label: string }[] = [
 
 const STAGE_PROGRESS_POINTS = [34, 68, 92];
 
-const instrumentInfoMap: Record<InstrumentType, { image: string; name: string }> = {
+const instrumentInfoMap = {
   piano: characterInfo.PIANO,
   guitar: characterInfo.GUITAR,
   marimba: characterInfo.MARIMBA,
   violin: characterInfo.VIOLIN,
   flute: characterInfo.FLUTE,
-};
+} as const;
 
 function mapBackendToFrontend(raw: any) {
   return {
@@ -133,7 +133,7 @@ export function AnalysisLoading({
     void fetchCharacter();
   }, []);
 
-  const instrumentInfo = instrumentInfoMap[instrument];
+  const instrumentInfo = instrumentInfoMap[instrument as keyof typeof instrumentInfoMap] ?? instrumentInfoMap.piano;
 
   useEffect(() => {
     if (analysisReady) {
@@ -198,15 +198,38 @@ export function AnalysisLoading({
     let isCancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    async function postAnalysisChallengeProcessing() {
+      if (!isTodayDate(payload?.date)) {
+        return;
+      }
+
+      try {
+        const challenge = await fetchChallenge();
+
+        if (challenge) {
+          const updatedResult = {
+            ...analysisResultRef.current,
+            challenge,
+          };
+
+          analysisResultRef.current = updatedResult;
+          onComplete?.(updatedResult);
+        }
+      } catch (err: any) {
+        console.error('Challenge post-processing failed:', err);
+      }
+    }
+
     async function storeAnalysisResult(raw: any) {
-      const challenge = await fetchChallenge();
       analysisResultRef.current = mapBackendToFrontend({
         ...raw,
-        challenge,
+        challenge: null,
       });
       setCurrentStage(2);
       setProgress(100);
       setAnalysisReady(true);
+
+      void postAnalysisChallengeProcessing();
     }
 
     async function fetchAnalysisResult() {
@@ -241,8 +264,10 @@ export function AnalysisLoading({
       try {
         if (triggerAnalysis) {
           const res = await api.post('/api/analysis', payload);
-          if (hasAnalysisFields(res.data)) {
-            await storeAnalysisResult(res.data);
+          const analysisData = res.data?.data ?? res.data;
+
+          if (hasAnalysisFields(analysisData)) {
+            await storeAnalysisResult(analysisData);
             return;
           }
         }
