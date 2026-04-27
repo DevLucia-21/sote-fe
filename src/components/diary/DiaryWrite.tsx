@@ -79,6 +79,14 @@ const formatDateLocal = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const normalizeDiaryKeywords = (keywords?: any[]) => {
+  if (!Array.isArray(keywords)) return [];
+
+  return keywords
+    .map((keyword: any) => typeof keyword === 'string' ? keyword : keyword.content)
+    .filter(Boolean);
+};
+
 export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWriteType, date: initialDate, editMode, isEasyMode, disableAnalysis = false }: DiaryWriteProps) {
   const [writeType, setWriteType] = useState<WriteType>(initialWriteType || editingDiary?.writeType || 'TEXT');
   const [date, setDate] = useState<Date>(
@@ -94,13 +102,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     editingDiary ? reverseEmotionMap[editingDiary.emotionType] : null
   );
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>(() => {
-    if (!editingDiary?.keywords) return [];
-
-    if (typeof editingDiary.keywords[0] === "string") {
-      return editingDiary.keywords as string[];
-    }
-
-    return editingDiary.keywords.map((k: any) => k.content);
+    return normalizeDiaryKeywords(editingDiary?.keywords);
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | undefined>(editingDiary?.imageUrl);
@@ -131,6 +133,9 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   const MINIMUM_LENGTH = 10;
   const initialContent = editingDiary?.content?.trim() ?? '';
   const hasEditedContent = content.trim() !== initialContent;
+  const initialKeywordKey = normalizeDiaryKeywords(editingDiary?.keywords).sort().join('|');
+  const selectedKeywordKey = [...selectedKeywords].sort().join('|');
+  const hasEditedKeywords = selectedKeywordKey !== initialKeywordKey;
 
   // Generate date options (오늘부터 30일 전까지)
   const dateOptions = Array.from({ length: 30 }, (_, i) => {
@@ -161,11 +166,24 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   }, [initialDate, editingDiary?.date]);
 
   useEffect(() => {
+    setSelectedKeywords(normalizeDiaryKeywords(editingDiary?.keywords));
+  }, [editingDiary?.id, editingDiary?.keywords]);
+
+  useEffect(() => {
     if (editMode || editingDiary) return;
 
     const targetDate = normalizeDiaryDateKey(initialDate || formatDateLocal(date));
     setShowDeletedAnalysisWarningDialog(hasDeletedDiaryAnalysisWarning(targetDate));
   }, [date, editMode, editingDiary, initialDate]);
+
+  useEffect(() => {
+    api.get("/api/users/keywords")
+      .then((res) => setUserKeywords(res.data || []))
+      .catch((err) => {
+        console.error("사용자 키워드 목록 조회 실패:", err);
+        setUserKeywords([]);
+      });
+  }, []);
 
   // Helper function to check if diary exists for a date
   const getDiaryByDate = (dateStr: string) => {
@@ -174,7 +192,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
   const isFormValid = () => {
     if (!content.trim() || content.trim().length < 10) return false;
-    if (editMode && editingDiary && !hasEditedContent) return false;
+    if (editMode && editingDiary && !hasEditedContent && !hasEditedKeywords) return false;
     // 키워드는 선택 사항
     return true;
   };
@@ -189,6 +207,18 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       }
       setSelectedKeywords([...selectedKeywords, keyword]);
     }
+  };
+
+  const getSelectedKeywordIds = () => {
+    const keywordIds = userKeywords
+      .filter(kw => selectedKeywords.includes(kw.content))
+      .map(kw => kw.id);
+
+    if (keywordIds.length > 0 || selectedKeywords.length === 0) {
+      return keywordIds;
+    }
+
+    return editingDiary?.keywordIds ?? [];
   };
 
   const handleDateSelect = (dateStr: string) => {
@@ -523,7 +553,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   };
 
   const handleSave = async () => {
-    if (editMode && editingDiary && !hasEditedContent) {
+    if (editMode && editingDiary && !hasEditedContent && !hasEditedKeywords) {
       return;
     }
 
@@ -541,6 +571,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
       const editPayload = {
         date: editingDiary.date,
         content: content.trim(),
+        keywordIds: getSelectedKeywordIds(),
       };
 
       console.group("Diary Edit Payload Debug");
@@ -578,11 +609,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     const payload = {
       date: editingDiary ? editingDiary.date : formatDateLocal(date),
       content: content.trim(),
-      keywordIds: editingDiary
-        ? editingDiary.keywordIds            // ← 수정 모드는 항상 기존 값 유지!
-        : userKeywords
-            .filter(kw => selectedKeywords.includes(kw.content))
-            .map(kw => kw.id),
+      keywordIds: getSelectedKeywordIds(),
       emotionType: editingDiary
         ? editingDiary.emotionType          // ← 감정도 수정 불가 정책이면 고정
         : emotionType
@@ -751,8 +778,7 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         <Card className="bg-card mb-4 border-border">
           <CardContent className="p-4">
             <Label className="text-sm mb-2 block text-foreground">
-              키워드 ({selectedKeywords.length}/5) 
-              {editingDiary && <span className="text-xs text-muted-foreground ml-1">(변경 불가)</span>}
+              키워드 ({selectedKeywords.length}/5)
             </Label>
 
             {/* 선택된 키워드 */}
@@ -765,40 +791,35 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
                   >
                     <span>{keyword}</span>
 
-                    {/* 수정 모드일 때는 삭제버튼 없앰 */}
-                    {!editingDiary && (
-                      <button
-                        onClick={() => toggleKeyword(keyword)}
-                        className="hover:bg-white/20 rounded-full p-0.5 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => toggleKeyword(keyword)}
+                      className="hover:bg-white/20 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* 등록된 키워드에서 선택 (수정 모드에서는 숨김) */}
-            {!editingDiary && (
-              <div className="space-y-2 max-w-full">
-                <p className="text-xs text-muted-foreground">등록된 키워드에서 선택</p>
+            {/* 등록된 키워드에서 선택 */}
+            <div className="space-y-2 max-w-full">
+              <p className="text-xs text-muted-foreground">등록된 키워드에서 선택</p>
 
-                <div className="flex flex-wrap gap-2">
-                  {userKeywords
-                    .filter(kw => !selectedKeywords.includes(kw.content))
-                    .map(kw => (
-                      <KeywordChip
-                        key={kw.id}
-                        keyword={kw.content}
-                        selected={selectedKeywords.includes(kw.content)}
-                        onToggle={() => toggleKeyword(kw.content)}
-                        disabled={selectedKeywords.length >= 5}
-                      />
-                    ))}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {userKeywords
+                  .filter(kw => !selectedKeywords.includes(kw.content))
+                  .map(kw => (
+                    <KeywordChip
+                      key={kw.id}
+                      keyword={kw.content}
+                      selected={selectedKeywords.includes(kw.content)}
+                      onToggle={() => toggleKeyword(kw.content)}
+                      disabled={selectedKeywords.length >= 5}
+                    />
+                  ))}
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       )}

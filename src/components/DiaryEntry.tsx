@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Label } from './ui/label';
+import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { TextDiaryWrite } from './diary/TextDiaryWrite';
@@ -145,6 +146,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
   
   const [keywords, setKeywords] = useState<string[]>([]);
   const [userKeywords, setUserKeywords] = useState([]);
+  const [newKeyword, setNewKeyword] = useState('');
   
   const [todayQuestion, setTodayQuestion] = useState(null);
 
@@ -295,6 +297,44 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
         return;
       }
       setKeywords([...keywords, keyword]);
+    }
+  };
+
+  const handleAddKeyword = async () => {
+    const trimmedKeyword = newKeyword.trim();
+
+    if (!trimmedKeyword) {
+      toast.error('키워드를 입력해주세요.');
+      return;
+    }
+
+    if (trimmedKeyword.length > 50) {
+      toast.error('키워드는 50자 이하로 입력해주세요.');
+      return;
+    }
+
+    if (Array.isArray(userKeywords) && userKeywords.some(kw => kw.content === trimmedKeyword)) {
+      toast.error('이미 등록된 키워드입니다.');
+      return;
+    }
+
+    try {
+      const res = await api.post("/api/users/keywords", {
+        content: trimmedKeyword,
+      });
+      const createdKeyword = res.data;
+
+      setUserKeywords(prev => [...prev, createdKeyword]);
+      setNewKeyword('');
+
+      if (keywords.length < 5) {
+        setKeywords(prev => [...prev, createdKeyword.content]);
+      }
+
+      toast.success('키워드가 등록되었습니다.');
+    } catch (err) {
+      console.error("키워드 등록 실패:", err);
+      toast.error('키워드 등록에 실패했습니다.');
     }
   };
 
@@ -728,7 +768,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
             </div>
           )}
 
-          {/* 키워드 입력
+          {/* 키워드 입력 */}
           <div className="flex gap-2 mb-3">
             <Input
               value={newKeyword}
@@ -741,7 +781,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
                 }
               }}
               className="flex-1 border-border bg-background text-foreground"
-              maxLength={10}
+              maxLength={50}
               disabled={keywords.length >= 5}
             />
             <Button
@@ -752,7 +792,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
             >
               <Plus className="w-4 h-4" />
             </Button>
-          </div> */}
+          </div>
 
           {/* 미리 등록된 키워드 */}
           <div className="space-y-2">

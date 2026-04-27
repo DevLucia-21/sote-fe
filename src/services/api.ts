@@ -28,6 +28,9 @@ const isBusiness403Request = (url?: string) => {
   return (
     url.includes("/api/analysis") ||
     url.includes("/api/challenge/") ||
+    url.includes("/api/statistics/") ||
+    url.includes("/api/calendar-notes/") ||
+    url.includes("/api/health/") ||
     url.includes("/api/ocr/upload") ||
     url.includes("/ai/stt/transcribe")
   );

@@ -458,54 +458,92 @@ export function StatisticsView() {
     const fetchMonthlyData = async () => {
       setIsLoadingMonthly(true);
       try {
-        const diary = await api.get("/api/statistics/diary", {
-          params: {
-            period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
-          }
-        });
-        console.log("year:", currentMonth.year, "month:", currentMonth.month)
-        const challengeEmotion = await api.get("/api/statistics/challenges/emotion-performance", {
-          params: {
-            period: "monthly",
-            month: `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`
-          }
-        });
-        const music = await api.get("/api/statistics/music", {
-          params: {
-            period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
-          }
-        });
-        const keywordRank = await api.get("/api/statistics/keywords/ranking", {
-          params: {
-            period: "monthly",
-            year: currentMonth.year,
-            month: currentMonth.month,
-          }
-        });
-        setMonthlyDiaryStats(diary.data);
+        const monthKey = `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`;
+        const [diary, challengeEmotion, music, keywordRank] = await Promise.allSettled([
+          api.get("/api/statistics/diary", {
+            params: {
+              period: "monthly",
+              year: currentMonth.year,
+              month: currentMonth.month,
+            }
+          }).catch(() => api.get("/api/statistics/diary", {
+            params: {
+              period: "monthly",
+              month: monthKey,
+            }
+          })),
+          api.get("/api/statistics/challenges/emotion-performance", {
+            params: {
+              period: "monthly",
+              month: monthKey,
+            }
+          }),
+          api.get("/api/statistics/music", {
+            params: {
+              period: "monthly",
+              year: currentMonth.year,
+              month: currentMonth.month,
+            }
+          }).catch(() => api.get("/api/statistics/music", {
+            params: {
+              period: "monthly",
+              month: monthKey,
+            }
+          })),
+          api.get("/api/statistics/keywords/ranking", {
+            params: {
+              period: "monthly",
+              year: currentMonth.year,
+              month: currentMonth.month,
+            }
+          }).catch(() => api.get("/api/statistics/keywords/ranking", {
+            params: {
+              period: "monthly",
+              month: monthKey,
+            }
+          })),
+        ]);
 
-        const ce = challengeEmotion.data;
-        const mergedPerformance: Record<string, { completed: number; total: number }> = {};
-        Object.keys(ce.emotionCounts ?? {}).forEach(emotion => {
-          mergedPerformance[emotion] = {
-            completed: ce.emotionCounts[emotion] ?? 0,
-            total: ce.totalCounts?.[emotion] ?? 0
+        if (diary.status === "fulfilled") {
+          setMonthlyDiaryStats(diary.value.data);
+        } else {
+          console.error("월간 일기 통계 로딩 실패:", diary.reason);
+          setMonthlyDiaryStats(null);
+        }
+
+        if (challengeEmotion.status === "fulfilled") {
+          const ce = challengeEmotion.value.data;
+          const mergedPerformance: Record<string, { completed: number; total: number }> = {};
+          Object.keys(ce.emotionCounts ?? {}).forEach(emotion => {
+            mergedPerformance[emotion] = {
+              completed: ce.emotionCounts[emotion] ?? 0,
+              total: ce.totalCounts?.[emotion] ?? 0
+            };
+          });
+          setMonthlyChallengePerformance(mergedPerformance);
+        } else {
+          console.error("월간 챌린지 감정별 수행 현황 로딩 실패:", challengeEmotion.reason);
+          setMonthlyChallengePerformance({});
+        }
+
+        if (music.status === "fulfilled") {
+          const musicRaw = music.value.data;
+          const normalizedMusicStats = {
+            monthlyCount: musicRaw.monthlyCount ?? 0,
+            emotionGenreMapping: musicRaw.emotionGenreMapping ?? {}
           };
-        });
-        setMonthlyChallengePerformance(mergedPerformance);
+          setMonthlyMusicStats(normalizedMusicStats);
+        } else {
+          console.error("월간 음악 통계 로딩 실패:", music.reason);
+          setMonthlyMusicStats(null);
+        }
 
-        const musicRaw = music.data;
-        const normalizedMusicStats = {
-          monthlyCount: musicRaw.monthlyCount ?? 0,
-          emotionGenreMapping: musicRaw.emotionGenreMapping ?? {}
-        };
-        setMonthlyMusicStats(normalizedMusicStats);
-
-        setMonthlyKeywords(keywordRank.data.rankings);  
+        if (keywordRank.status === "fulfilled") {
+          setMonthlyKeywords(keywordRank.value.data.rankings ?? []);
+        } else {
+          console.error("월간 키워드 랭킹 로딩 실패:", keywordRank.reason);
+          setMonthlyKeywords([]);
+        }
 
       } catch (err) {
         console.error(err);
@@ -522,23 +560,48 @@ export function StatisticsView() {
     const fetchTotalData = async () => {
       setIsLoadingTotal(true);
       try {
-        const diary = await api.get("/api/statistics/diary", { params: { period: "overall" }});
-        const analysis = await api.get("/api/statistics/analysis", { params: { period: "overall" }});
-        const badges = await api.get("/api/statistics/challenges/badges", { params: { period: "overall" }});
-        const mood = await api.get("/api/statistics/keywords/emotion-ranking", { params: { period: "overall" }});
-        const keywordExplore = await api.get("/api/statistics/keywords/explore", { params: { period: "overall" }});
+        const [diary, analysis, badges, mood, keywordExplore] = await Promise.allSettled([
+          api.get("/api/statistics/diary", { params: { period: "overall" }}),
+          api.get("/api/statistics/analysis", { params: { period: "overall" }}),
+          api.get("/api/statistics/challenges/badges", { params: { period: "overall" }}),
+          api.get("/api/statistics/keywords/emotion-ranking", { params: { period: "overall" }}),
+          api.get("/api/statistics/keywords/explore", { params: { period: "overall" }}),
+        ]);
 
-        setTotalDiaryCount(diary.data.totalCount);
-        setTotalEmotionDistribution(analysis.data.emotionDistribution);
-        setTotalBadgeCount(badges.data.badgeCount);
-        setMoodRanking(mood.data);
+        if (diary.status === "fulfilled") {
+          setTotalDiaryCount(diary.value.data.totalCount ?? 0);
+        } else {
+          console.error("누적 일기 통계 로딩 실패:", diary.reason);
+        }
+
+        if (analysis.status === "fulfilled") {
+          setTotalEmotionDistribution(analysis.value.data.emotionDistribution ?? {});
+        } else {
+          console.error("누적 감정 분포 로딩 실패:", analysis.reason);
+        }
+
+        if (badges.status === "fulfilled") {
+          setTotalBadgeCount(badges.value.data.badgeCount ?? 0);
+        } else {
+          console.error("누적 뱃지 통계 로딩 실패:", badges.reason);
+        }
+
+        if (mood.status === "fulfilled") {
+          setMoodRanking(mood.value.data);
+        } else {
+          console.error("누적 기분 랭킹 로딩 실패:", mood.reason);
+        }
         
-        const exploreRaw = keywordExplore.data.keywordToEmotions ?? {};
-        const mappedList = Object.entries(exploreRaw).map(([keyword, emotions]) => ({
-          keyword,
-          emotions
-        }));
-        setTotalKeywordMapping(mappedList);
+        if (keywordExplore.status === "fulfilled") {
+          const exploreRaw = keywordExplore.value.data.keywordToEmotions ?? {};
+          const mappedList = Object.entries(exploreRaw).map(([keyword, emotions]) => ({
+            keyword,
+            emotions
+          }));
+          setTotalKeywordMapping(mappedList);
+        } else {
+          console.error("누적 키워드 감정 탐구 로딩 실패:", keywordExplore.reason);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -1107,7 +1170,7 @@ export function StatisticsView() {
                                 </div>
 
                                 <div
-                                  className="h-1.5 rounded-full overflow-hidden ml-7"
+                                  className="h-1.5 rounded-full overflow-hidden"
                                   style={{
                                     backgroundColor: isDarkMode ? "#36392D" : "#E3E5D6",
                                   }}
