@@ -185,7 +185,7 @@ export function BadgeGallery({ onFetchBadges }: BadgeGalleryProps) {
   return (
     <>
       {/* 툴바: 정렬 & 필터 - 전체 너비 고정 */}
-      <div className="sticky top-[57px] left-0 right-0 z-40 bg-background border-b border-border -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 py-3 mb-6">
+      <div className="sticky top-0 left-0 right-0 z-40 bg-background border-b border-border -mx-4 md:-mx-8 lg:-mx-12 px-4 md:px-8 lg:px-12 py-3 mb-6">
         <div className="space-y-3">
           {/* 정렬 */}
           <div className="filter-scroll-area flex items-center gap-2 overflow-x-auto pb-2">

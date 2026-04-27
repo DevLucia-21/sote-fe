@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../services/api'
+import api from '../services/api'
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Play, Pause, Disc3, Sparkles } from 'lucide-react';
@@ -7,19 +7,30 @@ import { motion } from 'motion/react';
 import { LPDisc } from './lp/LPDisc';
 
 interface LPRewardViewProps {
-  onClose: () => void;
+  onClose?: () => void;
   music: {
     title: string;
     artist: string;
     albumImageUrl: string;
     reason: string;
     playUrl?: string;
+    emotionType?: string;
   };
 }
+
+const EMOTION_COLOR_MAP: Record<string, string> = {
+  JOY: '#F5B546',
+  SADNESS: '#6FA8FF',
+  ANGER: '#E57373',
+  ANXIOUS: '#B39DDB',
+  SENSITIVE: '#FFB3C1',
+  APATHY: '#C8C8C8',
+};
 
 export function LPRewardView({ onClose, music }: LPRewardViewProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showContent, setShowContent] = useState(false);
+  const discColor = EMOTION_COLOR_MAP[music.emotionType ?? ''] ?? '#7B8B4F';
 
   useEffect(() => {
     const timer = setTimeout(() => setShowContent(true), 800);
@@ -68,7 +79,7 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
                   title={music.title}
                   size="xl"
                   isPlaying={isPlaying}
-                  emotionColor="#7B8B4F"
+                  emotionColor={discColor}
                 />
 
                 {/* 재생 버튼 */}
@@ -118,7 +129,8 @@ export function LPRewardView({ onClose, music }: LPRewardViewProps) {
               transition={{ delay: 0.7 }}
             >
               <Button
-                onClick={onClose}
+                type="button"
+                onClick={() => onClose?.()}
                 className="w-full bg-primary text-white hover:bg-primary/90"
               >
                 확인

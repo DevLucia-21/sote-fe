@@ -183,8 +183,18 @@ export function AnalysisLoading({
     }
 
     try {
-      const statusRes = await api.get('/api/challenge/status');
-      return statusRes.data.challenge || statusRes.data;
+      let statusData = (await api.get('/api/challenge/status')).data;
+
+      if (!statusData?.challengeId) {
+        await api.get('/api/challenge/today');
+        statusData = (await api.get('/api/challenge/status')).data;
+      }
+
+      if (!statusData?.challengeId) {
+        return null;
+      }
+
+      return statusData.challenge || statusData;
     } catch (err: any) {
       console.error('Challenge API failed:', err);
       return null;

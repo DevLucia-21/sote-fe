@@ -12,12 +12,12 @@ import {
 import { LPMusic } from './types';
 import { LPDisc } from './LPDisc';
 
-/* 💚 UI 표시에만 사용하는 KST 변환 */
+/* UI 표시에만 사용하는 KST 변환 */
 function toKST(date: Date) {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
 }
 
-/* 💚 ISO Week (UTC 기준, 변경 금지) */
+/* ISO Week (UTC 기준, 변경 금지) */
 function getISOWeek(date: Date) {
   const target = new Date(date); // UTC 그대로 사용
   const dayNr = (target.getDay() + 6) % 7;
@@ -36,7 +36,7 @@ function getISOWeek(date: Date) {
   return { year: target.getFullYear(), week };
 }
 
-/* 💚 ISO 주차 범위 (UTC 기준) */
+/* ISO 주차 범위 (UTC 기준) */
 function getISOWeekRange(year: number, week: number) {
   const simple = new Date(year, 0, 4 + (week - 1) * 7);
   const dayNr = (simple.getDay() + 6) % 7;
@@ -128,7 +128,7 @@ export function LPWeeklyView({
   };
 
   /* ==========================
-      🔥 API 호출 (ISO 기준)
+      API 호출 (ISO 기준)
      ========================== */
   useEffect(() => {
     async function fetchWeeklyLP() {
