@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import api from '../../services/api';
+import axios from 'axios';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
@@ -14,12 +14,14 @@ import { ArrowLeft, X, Mic, Square, Loader2, AlertCircle, CheckCircle2, FileAudi
 import { toast } from 'sonner';
 import { EmotionType } from './types';
 
+const AI_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').replace(/\/$/, '');
+
 type STTStatus = 'idle' | 'transcribing' | 'success' | 'error' | 'limit_exceeded' | 'saving';
 type RecordingStatus = 'idle' | 'recording' | 'stopped';
 
 interface STTTranscribeProps {
   onBack: () => void;
-  onSave?: (data: STTSaveData) => void;
+  onSave?: (data: STTSaveData) => void | Promise<{ id?: number; diaryId?: number } | void>;
 
   onStartAnalysis?: (analysisRequest: {
     diaryId: number;
@@ -317,7 +319,7 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       
       const formData = new FormData();
       formData.append('file', file);
-      formData.append("user_id", userId);
+      formData.append("user_id", String(userId));
       formData.append("diary_date", diaryDate);
       formData.append('do_vad', doVad.toString());
 
@@ -328,8 +330,11 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         do_vad: doVad,
       });
 
-      const sttRes = await api.post("/ai/stt/transcribe", formData, {
-        baseURL: "http://localhost:8080",
+      if (!AI_BASE_URL) {
+        throw new Error("VITE_AI_BASE_URL is not configured.");
+      }
+
+      const sttRes = await axios.post(`${AI_BASE_URL}/ai/stt/transcribe`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
@@ -399,40 +404,50 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
 
     setStatus('saving');
 
-    try {
-      const token = localStorage.getItem("accessToken");
+    const savePayload: STTSaveData = {
+      userId,
+      content: transcribedText,
+      date: selectedDate,
+      keywordIds: realKeywordIds,
+      emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
+      sttId: sttId // 이건 부모가 쓸 수 있게 전달만
+    };
 
-      if (!token || !userId) {
+    let savedDiaryId: number | undefined;
+
+    try {
+      if (!userId) {
         toast.error("로그인 정보가 없습니다.");
         return;
       }
       
       if (onSave) {
-        onSave({
-          content: transcribedText,
-          date: selectedDate,
-          keywordIds: realKeywordIds,
-          emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
-          sttId: sttId // 이건 부모가 쓸 수 있게 전달만
-        });
+        const saveResult = await onSave(savePayload);
+        savedDiaryId = saveResult?.id ?? saveResult?.diaryId;
       };
-      
+    } catch (error) {
+      console.error("❌ STT 일기 저장 실패:", error);
+      toast.error("저장 중 문제가 발생했습니다.");
+      setStatus("error");
+      return;
+    }
+
+    try {
       toast.success("저장 완료! 감정 분석을 시작합니다.");
       console.log("저장 완료! 감정 분석을 시작합니다.")
 
-      // 감정 분석 화면으로 이동
-      if (onStartAnalysis) {
+      if (onStartAnalysis && savedDiaryId) {
         onStartAnalysis({
-          diaryId,
+          diaryId: savedDiaryId,
           genreIds: [],
           text: transcribedText
         });
       }
+
       setStatus("success");
     } catch (error) {
-      console.error("❌ 저장 실패:", error);
-      toast.error("저장 중 문제가 발생했습니다.");
-      setStatus("error");
+      console.error("STT 저장 후처리 실패:", error);
+      setStatus("success");
     }
   };
 

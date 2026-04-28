@@ -22,6 +22,7 @@ const stages: { stage: AnalysisStage; label: string }[] = [
 ];
 
 const STAGE_PROGRESS_POINTS = [34, 68, 92];
+const ANALYSIS_PENDING_RETRY_THRESHOLD = 20;
 
 const instrumentInfoMap = {
   piano: characterInfo.PIANO,
@@ -116,6 +117,8 @@ export function AnalysisLoading({
 
   const hasRunRef = useRef(false);
   const analysisResultRef = useRef<any>(null);
+  const retriedRef = useRef(false);
+  const pendingCountRef = useRef(0);
 
   useEffect(() => {
     async function fetchCharacter() {
@@ -204,6 +207,8 @@ export function AnalysisLoading({
   useEffect(() => {
     if (!payload?.diaryId || hasRunRef.current) return;
     hasRunRef.current = true;
+    retriedRef.current = false;
+    pendingCountRef.current = 0;
 
     let isCancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -252,6 +257,40 @@ export function AnalysisLoading({
       await storeAnalysisResult(res.data);
     }
 
+    async function retryAnalysisOnce() {
+      if (retriedRef.current || isCancelled) {
+        return false;
+      }
+
+      retriedRef.current = true;
+      pendingCountRef.current = 0;
+
+      try {
+        const retryPayload = {
+          ...payload,
+          diaryId: payload.diaryId,
+          text: payload.text ?? payload.content,
+          content: payload.content ?? payload.text,
+        };
+
+        const res = await api.post('/api/analysis', retryPayload);
+        const analysisData = res.data?.data ?? res.data;
+
+        if (!isCancelled && hasAnalysisFields(analysisData)) {
+          await storeAnalysisResult(analysisData);
+          return true;
+        }
+      } catch (err: any) {
+        const status = err.response?.status;
+
+        if (status !== 403 && status !== 409 && status !== 404) {
+          throw err;
+        }
+      }
+
+      return false;
+    }
+
     async function waitForAnalysisCompletion() {
       try {
         await fetchAnalysisResult();
@@ -259,6 +298,26 @@ export function AnalysisLoading({
         const status = err.response?.status;
 
         if ((status === 404 || status === 409) && !isCancelled) {
+          if (status === 409) {
+            pendingCountRef.current += 1;
+
+            if (
+              pendingCountRef.current >= ANALYSIS_PENDING_RETRY_THRESHOLD &&
+              !retriedRef.current
+            ) {
+              try {
+                const completedByRetry = await retryAnalysisOnce();
+                if (completedByRetry) {
+                  return;
+                }
+              } catch (retryErr) {
+                console.error('Analysis retry request failed:', retryErr);
+                setIsError(true);
+                return;
+              }
+            }
+          }
+
           retryTimer = setTimeout(() => {
             void waitForAnalysisCompletion();
           }, 1500);
