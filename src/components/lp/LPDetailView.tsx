@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import api from '../../services/api'
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
+import { ArrowLeft, Calendar, Music, Pause, Play } from 'lucide-react';
+import api from '../../services/api';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
-import { Badge } from '../ui/badge';
-import { Play, Pause, ArrowLeft, Music, Calendar } from 'lucide-react';
 import { LPMusic } from './types';
 
 interface LPDetailViewProps {
@@ -12,128 +12,114 @@ interface LPDetailViewProps {
   onBack: () => void;
 }
 
-// 🔥 emotionType → 한글 라벨 매핑
 const emotionLabels: Record<string, string> = {
-  JOY: "기쁨",
-  SADNESS: "슬픔",
-  ANGER: "분노",
-  SENSITIVE: "예민",
-  APATHY: "무기력",
+  JOY: '기쁨',
+  SADNESS: '슬픔',
+  ANGER: '분노',
+  SENSITIVE: '예민',
+  APATHY: '무기력',
 };
 
 const emotionColors: Record<string, string> = {
-  JOY: "#FFE080",
-  SADNESS: "#90C8FF",
-  ANGER: "#FFA0A0",
-  SENSITIVE: "#C4B0FF",
-  APATHY: "#C8C8C8",
+  JOY: '#FFE080',
+  SADNESS: '#90C8FF',
+  ANGER: '#FFA0A0',
+  SENSITIVE: '#C4B0FF',
+  APATHY: '#C8C8C8',
+};
+
+const emotionAccentColors: Record<string, string> = {
+  JOY: '#B77900',
+  SADNESS: '#2563EB',
+  ANGER: '#DC2626',
+  SENSITIVE: '#7C3AED',
+  APATHY: '#6B7280',
+};
+
+const emotionTypeByLabel: Record<string, string> = {
+  기쁨: 'JOY',
+  슬픔: 'SADNESS',
+  분노: 'ANGER',
+  화남: 'ANGER',
+  예민: 'SENSITIVE',
+  무기력: 'APATHY',
 };
 
 export function LPDetailView({ music, onBack }: LPDetailViewProps) {
-  console.log("📌 [LPDetailView] 부모에서 받은 music:", music);
   const [emotionType, setEmotionType] = useState<string | null>(null);
   const [emotionLabel, setEmotionLabel] = useState<string | null>(null);
-  const [extraInfo, setExtraInfo] = useState({ genre: "", reason: "" });
+  const [extraInfo, setExtraInfo] = useState({ genre: '', reason: '' });
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  /** 🔥 감정만 API로 불러오기 */
   useEffect(() => {
-    async function fetchEmotion() {
+    async function fetchDetail() {
       try {
-        const diaryRes = await api.get(`/api/diaries?date=${music.rewardDate}`);
-        console.log("🎨 상세 감정:", diaryRes.data);
-
-        const type = diaryRes.data?.emotionType || null;
-
-        setEmotionType(type);
-        setEmotionLabel(type ? emotionLabels[type] : null);
-
-      } catch (e) {
-        console.log("⚠ 감정 없음");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchEmotion();
-  }, [music.rewardDate]);
-
-  useEffect(() => {
-    async function fetchDiaryAndAnalysis() {
-      try {
-        // 1) 날짜로 일기 조회 → diaryId 가져오기
         const diaryRes = await api.get(`/api/diaries?date=${music.rewardDate}`);
         const diary = diaryRes.data;
+        const diaryEmotionType = diary?.emotionType || null;
 
-        if (!diary.id) {
-          console.log("⚠ 해당 날짜의 일기가 없습니다.");
-          setLoading(false);
+        if (diaryEmotionType) {
+          setEmotionType(diaryEmotionType);
+          setEmotionLabel(emotionLabels[diaryEmotionType] || diaryEmotionType);
+        }
+
+        if (!diary?.id) {
           return;
         }
 
-        const diaryId = diary.id;
-
-        // 2) 분석 결과 조회
-        const analysisRes = await api.get(`/api/analysis/${diaryId}`);
+        const analysisRes = await api.get(`/api/analysis/${diary.id}`);
         const result = analysisRes.data;
+        const label = result?.emotionLabel || null;
+        const type = result?.emotionType || emotionTypeByLabel[label] || diaryEmotionType;
 
-        console.log("🎧 분석 결과:", result);
+        if (type) {
+          setEmotionType(type);
+          setEmotionLabel(emotionLabels[type] || label);
+        }
 
-        // 감정
-        const type = result?.emotionLabel || null;
-        setEmotionLabel(type);
-
-        // 🔥 장르 및 이유 저장
         setExtraInfo({
-          genre: result.selectedTrackGenre,
-          reason: result.selectedTrackReason,
+          genre: result?.selectedTrackGenre || '',
+          reason: result?.selectedTrackReason || '',
         });
-
       } catch (err) {
-        console.error("⚠ 분석데이터 조회 실패:", err);
+        console.error('LP 상세 정보를 불러오지 못했습니다:', err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchDiaryAndAnalysis();
+    fetchDetail();
   }, [music.rewardDate]);
+
+  const lpBackgroundColor = emotionType && emotionColors[emotionType] ? emotionColors[emotionType] : '#7B8B4F';
+  const lpAccentColor = emotionType && emotionAccentColors[emotionType] ? emotionAccentColors[emotionType] : '#7B8B4F';
+
+  const handlePlayClick = () => {
+    if (!isPlaying && music.playUrl) {
+      window.open(music.playUrl, '_blank');
+    }
+    setIsPlaying((prev) => !prev);
+  };
 
   if (loading) {
     return (
-      <div className="p-6 text-center text-[#4A3228] opacity-60">
+      <div className="p-6 text-center text-muted-foreground">
         불러오는 중...
       </div>
     );
   }
 
-  // 🎨 emotionType 기준 배경색
-  const lpBackgroundColor =
-    emotionType && emotionColors[emotionType]
-      ? emotionColors[emotionType]
-      : "#7B8B4F";
-
-  const handlePlayClick = () => {
-    if (!isPlaying) {
-      window.open(music.playUrl, '_blank');
-    }
-    setIsPlaying(!isPlaying);
-  };
-
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-4 space-y-6">
-
-        {/* 헤더 */}
+      <div className="space-y-6 p-4">
         <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={onBack} className="text-[#4A3228]">
-            <ArrowLeft className="w-5 h-5 mr-2" />
+          <Button variant="ghost" onClick={onBack} className="text-foreground">
+            <ArrowLeft className="mr-2 h-5 w-5" />
             뒤로
           </Button>
         </div>
 
-        {/* LP 디스크 */}
         <div className="flex flex-col items-center">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -148,14 +134,14 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
                   ? { duration: 3, repeat: Infinity, ease: 'linear' }
                   : { duration: 0.5 }
               }
-              className="w-48 h-48 rounded-full flex items-center justify-center shadow-2xl"
+              className="flex h-48 w-48 items-center justify-center rounded-full shadow-2xl"
               style={{ backgroundColor: lpBackgroundColor }}
             >
-              <div className="w-40 h-40 bg-black rounded-full flex items-center justify-center relative overflow-hidden">
+              <div className="relative flex h-40 w-40 items-center justify-center overflow-hidden rounded-full bg-black">
                 {[0, 1, 2, 3, 4].map((ring) => (
                   <div
                     key={ring}
-                    className="absolute border border-gray-600 rounded-full"
+                    className="absolute rounded-full border border-gray-600"
                     style={{
                       width: `${140 - ring * 25}px`,
                       height: `${140 - ring * 25}px`,
@@ -163,39 +149,37 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
                   />
                 ))}
 
-                <div className="w-16 h-16 rounded-full overflow-hidden z-10">
+                <div className="z-10 h-16 w-16 overflow-hidden rounded-full">
                   <img
                     src={music.albumImageUrl}
                     alt={music.title}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
 
                 {isPlaying && (
                   <div className="absolute inset-0">
-                    <div className="w-full h-full rounded-full border-t border-white/20" />
+                    <div className="h-full w-full rounded-full border-t border-white/20" />
                   </div>
                 )}
               </div>
             </motion.div>
           </motion.div>
 
-          {/* 곡 정보 */}
-          <div className="text-center mt-6 space-y-2">
-            <h2 className="text-2xl text-[#4A3228]">{music.title}</h2>
-            <p className="text-lg text-[#4A3228]/70">{music.artist}</p>
-            {music.album && (
-              <p className="text-sm text-[#4A3228]/60">[ {music.album} ]</p>
-            )}
+          <div className="mt-6 space-y-2 text-center">
+            <h2 className="text-2xl text-foreground">{music.title}</h2>
+            <p className="text-lg text-muted-foreground">{music.artist}</p>
+            {music.album && <p className="text-sm text-muted-foreground">[ {music.album} ]</p>}
 
             {music.genre && (
-              <div className="pt-2 flex justify-center">
+              <div className="flex justify-center pt-2">
                 <Badge
-                  variant="secondary"
-                  className="text-xs px-3 py-1"
+                  variant="outline"
+                  className="px-3 py-1 text-xs"
                   style={{
-                    backgroundColor: lpBackgroundColor + '30',
-                    color: '#4A3228',
+                    backgroundColor: `${lpBackgroundColor}20`,
+                    borderColor: lpAccentColor,
+                    color: lpAccentColor,
                   }}
                 >
                   {music.genre}
@@ -204,36 +188,29 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
             )}
           </div>
 
-          {/* 재생 버튼 */}
           <div className="mt-6">
             <Button
               onClick={handlePlayClick}
               size="lg"
-              className="w-16 h-16 rounded-full"
-              style={{
-                backgroundColor: lpBackgroundColor,
-                color: '#FFFFFF',
-              }}
+              className="h-16 w-16 rounded-full text-white"
+              style={{ backgroundColor: lpBackgroundColor }}
             >
               {isPlaying ? <Pause /> : <Play className="ml-1" />}
             </Button>
           </div>
 
-          {/* 날짜 & 감정 카드 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35 }}
-            className="w-full mt-6"
+            className="mt-6 w-full"
           >
-            <Card className="bg-white/70 backdrop-blur-sm">
+            <Card className="border-border bg-card">
               <CardContent className="p-4">
                 <div className="space-y-2">
-
-                  {/* 날짜 */}
                   <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4" style={{ color: lpBackgroundColor }} />
-                    <span className="text-sm text-[#4A3228]">
+                    <Calendar className="h-4 w-4" style={{ color: lpBackgroundColor }} />
+                    <span className="text-sm text-foreground">
                       {new Date(music.rewardDate).toLocaleDateString('ko-KR', {
                         year: 'numeric',
                         month: 'long',
@@ -242,15 +219,14 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
                     </span>
                   </div>
 
-                  {/* 감정 */}
                   {emotionLabel && (
                     <Badge
-                      variant="secondary"
+                      variant="outline"
                       className="text-xs"
                       style={{
-                        backgroundColor: emotionColors[emotionType] + '20',
-                        color: '#4A3228',
-                        border: 'none',
+                        backgroundColor: `${lpBackgroundColor}20`,
+                        borderColor: lpAccentColor,
+                        color: lpAccentColor,
                       }}
                     >
                       {emotionLabel}
@@ -261,35 +237,30 @@ export function LPDetailView({ music, onBack }: LPDetailViewProps) {
             </Card>
           </motion.div>
 
-
-          {/* 추천 이유 */}
           {extraInfo.reason && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="w-full mt-4"
+              className="mt-4 w-full"
             >
-              <Card className="bg-white/70 backdrop-blur-sm">
+              <Card className="border-border bg-card">
                 <CardContent className="p-4">
                   <div className="flex items-start space-x-3">
-
-                    {/* 아이콘 영역 */}
                     <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ backgroundColor: '#F5F1E8' }}
+                      className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border shadow-sm"
+                      style={{
+                        backgroundColor: `${lpBackgroundColor}24`,
+                        borderColor: lpAccentColor,
+                      }}
                     >
-                      <Music className="w-4 h-4" style={{ color: lpBackgroundColor }} />
+                      <Music className="h-4 w-4 drop-shadow-sm" style={{ color: lpAccentColor }} />
                     </div>
 
-                    {/* 본문 */}
                     <div className="flex-1">
-                      <h4 className="font-medium mb-1 text-[#4A3228]">추천 이유</h4>
-                      <p className="text-sm" style={{ color: '#4A3228', opacity: 0.7 }}>
-                        {extraInfo.reason}
-                      </p>
+                      <h4 className="mb-1 font-medium text-foreground">추천 이유</h4>
+                      <p className="text-sm text-muted-foreground">{extraInfo.reason}</p>
                     </div>
-
                   </div>
                 </CardContent>
               </Card>

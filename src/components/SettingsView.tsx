@@ -169,7 +169,9 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
           weeklyStats: notifArray.includes("WEEKLY_STATS"),
           reminderCustom: notifArray.includes("REMINDER_CUSTOM"),
         });
-        if (typeof themeRes.data?.darkMode === "boolean") {
+        const savedTheme = localStorage.getItem('theme');
+        const hasLocalTheme = savedTheme === 'dark' || savedTheme === 'easy' || savedTheme === 'light';
+        if (!hasLocalTheme && typeof themeRes.data?.darkMode === "boolean") {
           setTheme(themeRes.data.darkMode ? "dark" : "light");
         }
       } catch (error) {

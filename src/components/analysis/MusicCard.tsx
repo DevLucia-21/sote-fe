@@ -81,12 +81,12 @@ export function MusicCard({
           {/* Genre */}
           {genre && (
             <Badge
-              variant="secondary"
-              className="text-xs"
+              variant="outline"
+              className="px-3 py-1 text-xs"
               style={{
-                backgroundColor: '#dfdfdfff',
-                color: '#4A3228',
-                border: 'none',
+                borderColor: style.accentColor,
+                color: style.accentColor,
+                backgroundColor: `${style.accentColor}15`,
               }}
             >
               {genre}
@@ -97,7 +97,7 @@ export function MusicCard({
           {reason && (
             <div className="bg-secondary rounded-xl p-4 mt-3">
               <p className="text-sm mb-1" style={{ color: '#7B8B4F' }}>추천 이유</p>
-              <p className="text-sm leading-relaxed text-[#4A3228]/80">
+              <p className="text-sm leading-relaxed text-foreground/80">
                 {reason}
               </p>
             </div>

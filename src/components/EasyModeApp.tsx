@@ -72,11 +72,11 @@ export function EasyModeApp({ onLogout }: EasyModeAppProps) {
       </div>
 
       {/* 하단 탭 네비게이션 - 큰 버튼 */}
-      <div 
-        className="fixed bottom-0 left-0 right-0 border-t-2 transition-colors duration-300" 
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 border-t-2 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-colors duration-300"
         style={{ 
-          backgroundColor: isDark ? '#2a2a2a' : 'white',
-          borderColor: isDark ? '#3a3a3a' : '#E5E5E5' 
+          backgroundColor: isDark ? '#2a2a2a' : '#FFFFFF',
+          borderColor: isDark ? '#3a3a3a' : '#E5E5E5',
         }}
       >
         <div className="flex justify-around py-3">

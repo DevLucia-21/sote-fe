@@ -11,6 +11,7 @@ import { MusicCard } from '../analysis/MusicCard';
 import { ChallengeCard } from '../analysis/ChallengeCard';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import { CharacterType } from '../common/characterImages';
+import { KeywordChip } from '../diary/KeywordChip';
 import { markDeletedDiaryAnalysisWarning } from '../../utils/deletedDiaryAnalysisWarning';
 import { hasRewrittenDiaryStatus } from '../../utils/rewrittenDiaryStatus';
 import {
@@ -447,16 +448,11 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
                   <p className="text-sm mb-2 text-primary">키워드</p>
                   <div className="flex flex-wrap gap-2">
                     {detailDiary.keywords.map((keyword, index) => (
-                      <span
+                      <KeywordChip
                         key={index}
-                        className="px-3 py-1 rounded-full text-xs"
-                        style={{
-                          backgroundColor: color + '15',
-                          color: color,
-                        }}
-                      >
-                        #{keyword}
-                      </span>
+                        keyword={`#${keyword}`}
+                        emotion={analysisData.emotion}
+                      />
                     ))}
                   </div>
                 </div>
