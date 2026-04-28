@@ -1,32 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
+import axios from 'axios';
 import api from '../../services/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Label } from '../ui/label';
-import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Textarea } from '../ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { ArrowLeft, Upload, X, Image as ImageIcon, Loader2, AlertCircle, CheckCircle2, BookOpen, Notebook, PenTool } from 'lucide-react';
+import { ArrowLeft, Upload, X, Image as ImageIcon, Loader2, AlertCircle, BookOpen, Notebook, PenTool } from 'lucide-react';
 import { HandwritingCanvas } from './HandwritingCanvas';
 import { toast } from 'sonner';
 import { EmotionType } from './types';
 
 type OCRStatus = 'idle' | 'uploading' | 'success' | 'error' | 'limit_exceeded' | 'saving';
+type OCRTemplate = 'blank' | 'diary' | 'grid' | 'lined';
+
+const AI_BASE_URL = (import.meta.env.VITE_AI_BASE_URL || '').replace(/\/$/, '');
 
 interface OCRPreviewProps {
   onBack: () => void;
-  onSave?: (data: OCRSaveData) => void;
-  
-  // ✔ 분석 시작 요청은 분석 요청 객체를 받음
+  onSave?: (data: OCRSaveData) => void | Promise<any>;
   onStartAnalysis?: (analysisRequest: {
     diaryId: number;
     genreIds: number[];
     text: string;
   }) => void;
-
-  selectedDate: string;
-  userKeywords: { id: number, content: string }[];
+  selectedDate?: string;
+  userKeywords?: { id: number; content: string }[];
 }
 
 export interface OCRSaveData {
@@ -38,10 +38,8 @@ export interface OCRSaveData {
   emotionType?: EmotionType;
   template?: string;
   canvasImage?: string;
+  imageBase64?: string;
 }
-
-// OCR 템플릿 타입
-type OCRTemplate = 'blank' | 'diary' | 'grid' | 'lined';
 
 const templates = [
   {
@@ -49,78 +47,84 @@ const templates = [
     name: '자유 작성',
     icon: PenTool,
     description: '빈 캔버스에 자유롭게 작성',
-    background: 'bg-white'
+    background: 'bg-white',
   },
   {
     id: 'diary' as OCRTemplate,
     name: '그림일기',
     icon: BookOpen,
     description: '위에 그림, 아래 글 영역',
-    background: 'bg-gradient-to-b from-blue-50 via-white to-yellow-50'
+    background: 'bg-gradient-to-b from-blue-50 via-white to-yellow-50',
   },
   {
     id: 'lined' as OCRTemplate,
     name: '줄 노트',
     icon: Notebook,
     description: '가로줄이 있는 노트',
-    background: 'bg-white'
+    background: 'bg-white',
   },
 ];
 
-export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, userKeywords }: OCRPreviewProps) {
+const getTodayKey = () => new Date().toISOString().slice(0, 10);
+
+export function OCRPreview({
+  onBack,
+  onSave,
+  onStartAnalysis,
+  selectedDate = getTodayKey(),
+  userKeywords = [],
+}: OCRPreviewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<OCRStatus>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>('');
-  const [extractedText, setExtractedText] = useState<string>('');
-  const [imageUrl, setImageUrl] = useState<string>('');
-  const [filename, setFilename] = useState<string>('');
+  const [selectedFileSource, setSelectedFileSource] = useState<'canvas' | 'upload' | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [extractedText, setExtractedText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [filename, setFilename] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<OCRTemplate>('blank');
-  const [canvasImageData, setCanvasImageData] = useState<string>('');
-  
-  // 키워드 관리
-  const [keywords, setKeywords] = useState<string[]>([]);
-  const realKeywordIds = userKeywords
-    .filter(kw => keywords.includes(kw.content))
-    .map(kw => kw.id);
-  
-  // 감정 선택
-  const [selectedEmotion, setSelectedEmotion] = useState<EmotionType | 'none'>('none');
-  
-  // 다이얼로그
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [canvasImageData, setCanvasImageData] = useState('');
+  const [keywords] = useState<string[]>([]);
+  const [selectedEmotion] = useState<EmotionType | 'none'>('none');
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const realKeywordIds = userKeywords
+    .filter((keyword) => keywords.includes(keyword.content))
+    .map((keyword) => keyword.id);
+
+  const resetResult = () => {
+    setExtractedText('');
+    setImageUrl('');
+    setFilename('');
+    setStatus('idle');
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    // 파일 타입 검증
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heic', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       toast.error('지원하지 않는 파일 형식입니다.');
       return;
     }
 
-    // 파일 크기 검증 (10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('파일 크기는 10MB 이하여야 합니다.');
       return;
     }
 
     setSelectedFile(file);
+    setSelectedFileSource('upload');
+    setCanvasImageData('');
+    resetResult();
+
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreviewUrl(e.target?.result as string);
+    reader.onload = (readerEvent) => {
+      setPreviewUrl(readerEvent.target?.result as string);
     };
     reader.readAsDataURL(file);
-    
-    // 기존 결과 초기화
-    setExtractedText('');
-    setImageUrl('');
-    setFilename('');
-    setStatus('idle');
   };
 
   const handleUploadClick = () => {
@@ -129,11 +133,10 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
+    setSelectedFileSource(null);
     setPreviewUrl('');
-    setExtractedText('');
-    setImageUrl('');
-    setFilename('');
-    setStatus('idle');
+    setCanvasImageData('');
+    resetResult();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -145,22 +148,29 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
       return;
     }
 
+    if (!AI_BASE_URL) {
+      setStatus('error');
+      setErrorMessage('AI 서버 주소가 설정되지 않았습니다.');
+      setShowErrorDialog(true);
+      return;
+    }
+
     setStatus('uploading');
 
     try {
+      const userId = localStorage.getItem('user_id') || '';
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('user_id', localStorage.getItem("user_id") || "");
+      formData.append('user_id', userId);
 
-      const res = await api.post("/api/ocr/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+      const response = await axios.post(`${AI_BASE_URL}/ocr/preview`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      setExtractedText(res.data.text);
-      setImageUrl(res.data.imageUrl);
-      setFilename(res.data.filename);
+      setExtractedText(response.data.text ?? '');
+      setImageUrl(response.data.imageUrl ?? '');
+      setFilename(response.data.filename ?? '');
       setStatus('success');
-
       toast.success('텍스트 추출이 완료되었습니다!');
     } catch (error: any) {
       setStatus('error');
@@ -175,51 +185,68 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
     }
   };
 
+  const handleCanvasReady = (file: File) => {
+    setSelectedFile(file);
+    setSelectedFileSource('canvas');
+    resetResult();
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCanvasImageData(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    toast.success('작성한 손글씨가 준비됐어요. 텍스트 추출을 눌러주세요.');
+  };
+
   const handleSaveAsDiary = async () => {
-    if (!extractedText.trim()) {
+    const content = extractedText.trim();
+    if (!content) {
       toast.error('추출된 텍스트가 없습니다.');
       return;
     }
 
     setStatus('saving');
 
+    const saveData: OCRSaveData = {
+      userId: Number(localStorage.getItem('user_id')),
+      content,
+      imageUrl,
+      date: selectedDate,
+      keywordIds: realKeywordIds,
+      emotionType: selectedEmotion !== 'none' ? selectedEmotion : undefined,
+      template: selectedTemplate,
+      canvasImage: canvasImageData,
+      imageBase64: canvasImageData || undefined,
+    };
+
     try {
-      const saveData: OCRSaveData = {
-        userId: Number(localStorage.getItem("user_id")),
-        content: extractedText,
-        imageUrl: imageUrl,
-        date: selectedDate,
-        keywordIds: realKeywordIds,
-        emotionType: selectedEmotion !== 'none' ? selectedEmotion : undefined,
-        template: selectedTemplate,
-        canvasImage: canvasImageData
-      };
-      const res = await api.post("/api/ocr/results", saveData);
-      const diary = res.data;
-      
-      toast.success('저장했어요. 감정 분석을 시작합니다.');
-
       if (onSave) {
-        onSave({
-          userId: Number(localStorage.getItem("user_id")),
-          content: diary.content,
-          imageUrl,
-          date: selectedDate,
-          keywordIds: realKeywordIds,
-          emotionType: selectedEmotion !== "none" ? selectedEmotion : undefined,
-        });
+        await onSave(saveData);
+        toast.success('저장했어요. 감정 분석을 시작합니다.');
+        return;
       }
 
-      // 감정 분석 화면으로 이동
-      if (onStartAnalysis) {
-        onStartAnalysis({
-          diaryId: res.data.id,
-          date: selectedDate,
-          keywordIds: realKeywordIds,
-          content: diary.content,
-        });
+      const response = await api.post('/api/ocr/results', saveData);
+      const diary = response.data;
+      const savedDiaryId = diary?.id ?? diary?.diaryId;
+      const savedContent = diary?.content ?? content;
+
+      if (!savedDiaryId) {
+        throw new Error('저장된 일기 ID를 확인할 수 없습니다.');
       }
+
+      toast.success('저장했어요. 감정 분석을 시작합니다.');
+      onStartAnalysis?.({
+        diaryId: savedDiaryId,
+        genreIds: realKeywordIds,
+        text: savedContent,
+      });
     } catch (error) {
+      console.error('OCR diary save failed:', error);
       setStatus('error');
       setErrorMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
       setShowErrorDialog(true);
@@ -228,22 +255,14 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
 
   return (
     <div className="min-h-screen p-4 pb-20 bg-background">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="p-2 text-foreground"
-        >
+        <Button variant="ghost" onClick={onBack} className="p-2 text-foreground">
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="text-xl text-foreground">
-          손글씨 일기
-        </h1>
-        <div className="w-9" /> {/* Spacer for centering */}
+        <h1 className="text-xl text-foreground">손글씨 일기</h1>
+        <div className="w-9" />
       </div>
 
-      {/* 설명 */}
       <Card className="bg-card mb-4 border-border">
         <CardContent className="p-4">
           <div className="flex items-start gap-2">
@@ -260,27 +279,23 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
         </CardContent>
       </Card>
 
-      {/* 탭 */}
       <Tabs defaultValue="write" className="mb-4">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="write">손글씨 작성</TabsTrigger>
           <TabsTrigger value="upload">이미지 업로드</TabsTrigger>
         </TabsList>
 
-        {/* 손글씨 작성 탭 */}
         <TabsContent value="write">
-          {/* 템플릿 선택 */}
           <Card className="bg-card border-border mb-4">
             <CardContent className="p-4">
-              <Label className="text-sm mb-3 block text-foreground">
-                템플릿 선택
-              </Label>
+              <Label className="text-sm mb-3 block text-foreground">템플릿 선택</Label>
               <div className="grid grid-cols-3 gap-2">
                 {templates.map((template) => {
                   const Icon = template.icon;
                   return (
                     <button
                       key={template.id}
+                      type="button"
                       onClick={() => setSelectedTemplate(template.id)}
                       className={`p-3 rounded-lg border-2 transition-all ${
                         selectedTemplate === template.id
@@ -288,9 +303,11 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                           : 'border-border bg-card hover:border-primary/50'
                       }`}
                     >
-                      <Icon className={`w-6 h-6 mx-auto mb-1 ${
-                        selectedTemplate === template.id ? 'text-primary' : 'text-muted-foreground'
-                      }`} />
+                      <Icon
+                        className={`w-6 h-6 mx-auto mb-1 ${
+                          selectedTemplate === template.id ? 'text-primary' : 'text-muted-foreground'
+                        }`}
+                      />
                       <p className="text-xs text-center text-foreground">{template.name}</p>
                     </button>
                   );
@@ -301,58 +318,23 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
 
           <Card className="bg-card border-border">
             <CardContent className="p-4">
-              <HandwritingCanvas
-                template={selectedTemplate}
-                onSave={async (file) => {
-                  setSelectedFile(file);
-                  setPreviewUrl(URL.createObjectURL(file));
-                  setStatus('idle');
-                  
-                  try {
-                    const formData = new FormData();
-                    formData.append("file", file);
-                    formData.append("user_id", localStorage.getItem("user_id") || "");
+              <HandwritingCanvas template={selectedTemplate} onSave={handleCanvasReady} />
 
-                    const res = await api.post("/api/ocr/upload", formData, {
-                      headers: { "Content-Type": "multipart/form-data" },
-                    });
-
-                    setExtractedText(res.data.text);
-                    setImageUrl(res.data.imageUrl);
-                    setFilename(res.data.filename);
-                    setStatus("success");
-
-                    toast.success("텍스트 추출이 완료되었습니다!");
-
-                  } catch (error: any) {
-                    setStatus("error");
-
-                    if (error.response?.status === 403) {
-                      setErrorMessage("오늘 OCR 사용 횟수를 모두 소진했습니다. 자정 이후 다시 시도해 주세요.");
-                    } else if (error.response?.status === 415) {
-                      setErrorMessage("지원하지 않는 파일 형식입니다.");
-                    } else {
-                      setErrorMessage("지금은 처리할 수 없어요. 잠시 후 다시 시도해 주세요.");
-                    }
-
-                    setShowErrorDialog(true);
-                  }
-                }}
-              />
+              {selectedFileSource === 'canvas' && selectedFile && status !== 'uploading' && status !== 'success' && (
+                <Button onClick={handlePreview} className="w-full mt-3 text-white bg-primary hover:bg-primary/90">
+                  <Upload className="w-4 h-4 mr-2" />
+                  텍스트 추출
+                </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* 이미지 업로드 탭 */}
         <TabsContent value="upload">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 좌측: 이미지 업로더 */}
             <Card className="bg-card border-border">
               <CardContent className="p-4">
-                <Label className="text-sm mb-3 block text-foreground">
-                  이미지 업로드
-                </Label>
-                
+                <Label className="text-sm mb-3 block text-foreground">이미지 업로드</Label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -368,22 +350,15 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                     style={{ minHeight: '200px' }}
                   >
                     <ImageIcon className="w-12 h-12 mb-3 text-primary" />
-                    <p className="text-sm mb-1 text-foreground">
-                      클릭하여 이미지 선택
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      JPG, PNG, HEIC, WebP (최대 10MB)
-                    </p>
+                    <p className="text-sm mb-1 text-foreground">클릭하여 이미지 선택</p>
+                    <p className="text-xs text-muted-foreground">JPG, PNG, HEIC, WebP (최대 10MB)</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="relative rounded-lg overflow-hidden bg-muted">
-                      <img
-                        src={previewUrl}
-                        alt="Preview"
-                        className="w-full h-48 object-contain"
-                      />
+                      <img src={previewUrl} alt="Preview" className="w-full h-48 object-contain" />
                       <button
+                        type="button"
                         onClick={handleRemoveFile}
                         className="absolute top-2 right-2 p-1.5 rounded-full bg-card shadow-md hover:bg-muted transition-colors"
                       >
@@ -391,14 +366,8 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                       </button>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm truncate text-foreground">
-                        {selectedFile.name}
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUploadClick}
-                      >
+                      <p className="text-sm truncate text-foreground">{selectedFile.name}</p>
+                      <Button variant="outline" size="sm" onClick={handleUploadClick}>
                         재선택
                       </Button>
                     </div>
@@ -407,29 +376,22 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
               </CardContent>
             </Card>
 
-            {/* 우측: 텍스트 미리보기 */}
             <Card className="bg-card border-border">
               <CardContent className="p-4">
-                <Label className="text-sm mb-3 block text-foreground">
-                  추출 텍스트
-                </Label>
-
+                <Label className="text-sm mb-3 block text-foreground">추출 텍스트</Label>
                 <div className="border border-border rounded-lg p-3 bg-muted/30" style={{ minHeight: '200px' }}>
                   {status === 'uploading' ? (
                     <div className="flex flex-col items-center justify-center h-full py-12">
                       <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
-                      <p className="text-sm text-muted-foreground">
-                        이미지에서 텍스트를 추출하는 중…
-                      </p>
+                      <p className="text-sm text-muted-foreground">이미지에서 텍스트를 추출하는 중...</p>
                     </div>
                   ) : extractedText ? (
-                    <div className="whitespace-pre-wrap text-sm text-foreground">
-                      {extractedText}
-                    </div>
+                    <div className="whitespace-pre-wrap text-sm text-foreground">{extractedText}</div>
                   ) : (
                     <div className="flex items-center justify-center h-full py-12">
                       <p className="text-sm text-center text-muted-foreground">
-                        아직 미리보기가 없습니다.<br />
+                        아직 미리보기가 없습니다.
+                        <br />
                         이미지를 업로드하고 미리보기를 실행해주세요.
                       </p>
                     </div>
@@ -437,10 +399,7 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                 </div>
 
                 {selectedFile && status !== 'uploading' && status !== 'success' && (
-                  <Button
-                    onClick={handlePreview}
-                    className="w-full mt-3 text-white bg-primary hover:bg-primary/90"
-                  >
+                  <Button onClick={handlePreview} className="w-full mt-3 text-white bg-primary hover:bg-primary/90">
                     <Upload className="w-4 h-4 mr-2" />
                     미리보기 실행
                   </Button>
@@ -451,29 +410,23 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
         </TabsContent>
       </Tabs>
 
-      {/* 날짜 선택 */}
       {status === 'success' && (
         <>
           <Card className="bg-card mb-4 border-border">
             <CardContent className="p-4">
-              <Label className="text-sm mb-3 block text-foreground">
-                추출된 텍스트
-              </Label>
+              <Label className="text-sm mb-3 block text-foreground">추출된 텍스트</Label>
               <Textarea
                 value={extractedText}
-                onChange={(e) => setExtractedText(e.target.value)}
+                onChange={(event) => setExtractedText(event.target.value)}
                 className="min-h-[200px] border-border resize-none bg-background text-foreground"
                 placeholder="추출된 텍스트를 편집할 수 있습니다..."
               />
               <div className="flex justify-end mt-2">
-                <span className="text-xs text-muted-foreground">
-                  {extractedText.length}자
-                </span>
+                <span className="text-xs text-muted-foreground">{extractedText.length}자</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* 저장 버튼 */}
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -501,7 +454,6 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
         </>
       )}
 
-      {/* 오류 다이얼로그 */}
       <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
         <DialogContent className="border-border">
           <DialogHeader>
@@ -510,18 +462,11 @@ export function OCRPreview({ onBack, onSave, onStartAnalysis, selectedDate, user
                 <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400" />
               </div>
             </div>
-            <DialogTitle className="text-center text-foreground">
-              오류 발생
-            </DialogTitle>
-            <DialogDescription className="text-center text-muted-foreground">
-              {errorMessage}
-            </DialogDescription>
+            <DialogTitle className="text-center text-foreground">오류 발생</DialogTitle>
+            <DialogDescription className="text-center text-muted-foreground">{errorMessage}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              onClick={() => setShowErrorDialog(false)}
-              className="w-full text-white bg-accent hover:bg-accent/90"
-            >
+            <Button onClick={() => setShowErrorDialog(false)} className="w-full text-white bg-accent hover:bg-accent/90">
               확인
             </Button>
           </DialogFooter>
