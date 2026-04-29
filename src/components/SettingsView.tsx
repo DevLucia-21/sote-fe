@@ -64,6 +64,60 @@ function safeGet(key: string) {
   }
 }
 
+type NotificationKey =
+  | 'diary'
+  | 'challenge'
+  | 'emotionDone'
+  | 'musicRecommend'
+  | 'weeklyStats'
+  | 'reminderCustom';
+
+type NotificationType =
+  | 'DIARY'
+  | 'CHALLENGE'
+  | 'EMOTION_DONE'
+  | 'MUSIC_RECOMMEND'
+  | 'WEEKLY_STATS'
+  | 'REMINDER_CUSTOM';
+
+type NotificationState = Record<NotificationKey, boolean>;
+
+const NOTIFICATION_TYPE_BY_KEY: Record<NotificationKey, NotificationType> = {
+  diary: 'DIARY',
+  challenge: 'CHALLENGE',
+  emotionDone: 'EMOTION_DONE',
+  musicRecommend: 'MUSIC_RECOMMEND',
+  weeklyStats: 'WEEKLY_STATS',
+  reminderCustom: 'REMINDER_CUSTOM',
+};
+
+const NOTIFICATION_KEYS = Object.keys(NOTIFICATION_TYPE_BY_KEY) as NotificationKey[];
+
+const DEFAULT_NOTIFICATIONS: NotificationState = {
+  diary: true,
+  challenge: true,
+  emotionDone: false,
+  musicRecommend: false,
+  weeklyStats: false,
+  reminderCustom: false,
+};
+
+const toEnabledNotifications = (notificationState: NotificationState): NotificationType[] =>
+  NOTIFICATION_KEYS
+    .filter(key => notificationState[key])
+    .map(key => NOTIFICATION_TYPE_BY_KEY[key]);
+
+const fromEnabledNotifications = (enabledNotifications: unknown): NotificationState => {
+  const enabledSet = new Set(
+    Array.isArray(enabledNotifications) ? enabledNotifications : []
+  );
+
+  return NOTIFICATION_KEYS.reduce<NotificationState>((nextState, key) => {
+    nextState[key] = enabledSet.has(NOTIFICATION_TYPE_BY_KEY[key]);
+    return nextState;
+  }, { ...DEFAULT_NOTIFICATIONS });
+};
+
 export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   const [currentView, setCurrentView] = useState<ViewType>('main');
 
@@ -81,14 +135,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
     const saved = localStorage.getItem('dailyQuestionEnabled');
     return saved !== null ? saved === 'true' : true;
   });
-  const [notifications, setNotifications] = useState({
-    diary: true,
-    challenge: true,
-    emotionDone: false,
-    musicRecommend: false,
-    weeklyStats: false,
-    reminderCustom: false,
-  });
+  const [notifications, setNotifications] = useState<NotificationState>(DEFAULT_NOTIFICATIONS);
   const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
     const saved = localStorage.getItem('theme');
     return (saved === 'dark' || saved === 'easy' || saved === 'light') ? saved : 'light';
@@ -160,15 +207,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
           api.get('/api/settings/notifications'),
           api.get('/api/settings/theme'),
         ]);
-        const notifArray = notifRes.data.enabledNotifications || [];
-        setNotifications({
-          diary: notifArray.includes("DIARY"),
-          challenge: notifArray.includes("CHALLENGE"),
-          emotionDone: notifArray.includes("EMOTION_DONE"),
-          musicRecommend: notifArray.includes("MUSIC_RECOMMEND"),
-          weeklyStats: notifArray.includes("WEEKLY_STATS"),
-          reminderCustom: notifArray.includes("REMINDER_CUSTOM"),
-        });
+        setNotifications(fromEnabledNotifications(notifRes.data.enabledNotifications));
         const savedTheme = localStorage.getItem('theme');
         const hasLocalTheme = savedTheme === 'dark' || savedTheme === 'easy' || savedTheme === 'light';
         if (!hasLocalTheme && typeof themeRes.data?.darkMode === "boolean") {
@@ -245,15 +284,57 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   }, [theme]);
 
   // Handlers
+  const saveNotificationSettings = async (
+    nextNotifications: NotificationState,
+    previousNotifications: NotificationState,
+    successMessage = '저장됨'
+  ) => {
+    setNotifications(nextNotifications);
+
+    try {
+      await api.put('/api/settings/notifications', {
+        enabledNotifications: toEnabledNotifications(nextNotifications),
+      });
+      toast.success(successMessage);
+    } catch (error) {
+      console.error('알림 설정 저장 실패:', error.response?.data || error.response || error.message);
+      setNotifications(previousNotifications);
+      toast.error('알림 설정 저장에 실패했습니다.');
+    }
+  };
+
+  const handleNotificationChange = (key: NotificationKey, checked: boolean) => {
+    const nextNotifications = {
+      ...notifications,
+      [key]: checked,
+    };
+
+    void saveNotificationSettings(nextNotifications, notifications);
+  };
+
+  const handleDiaryAnalysisNotificationChange = (checked: boolean) => {
+    const nextNotifications = {
+      ...notifications,
+      emotionDone: checked,
+      musicRecommend: checked,
+    };
+
+    void saveNotificationSettings(nextNotifications, notifications);
+  };
+
   const toggleAllNotifications = () => {
-    const allOn = notifications.diary && notifications.challenge && notifications.emotionDone;
+    const allOn = NOTIFICATION_KEYS.every(key => notifications[key]);
     const newValue = !allOn;
-    setNotifications({
-      diary: newValue,
-      challenge: newValue,
-      emotionDone: newValue
-    });
-    toast.success(newValue ? '모든 알림이 켜졌습니다' : '모든 알림이 꺼졌습니다');
+    const nextNotifications = NOTIFICATION_KEYS.reduce<NotificationState>((nextState, key) => {
+      nextState[key] = newValue;
+      return nextState;
+    }, { ...notifications });
+
+    void saveNotificationSettings(
+      nextNotifications,
+      notifications,
+      newValue ? '모든 알림이 켜졌습니다' : '모든 알림이 꺼졌습니다'
+    );
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -416,7 +497,10 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
       }
 
       try {
-        await api.post("/api/settings/token", { token });
+        await api.post("/api/settings/token", {
+          token,
+          deviceType: "MOBILE",
+        });
         localStorage.setItem("fcmToken", token);
       } catch (e) {
       console.error("❌ 서버에 FCM 토큰 저장 실패:", e);
@@ -1044,10 +1128,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             </div>
             <Switch
               checked={notifications.diary}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, diary: checked }));
-                toast.success('저장됨');
-              }}
+              onCheckedChange={(checked) => handleNotificationChange('diary', checked)}
             />
           </div>
 
@@ -1060,42 +1141,20 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             </div>
             <Switch
               checked={notifications.challenge}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, challenge: checked }));
-                toast.success('저장됨');
-              }}
+              onCheckedChange={(checked) => handleNotificationChange('challenge', checked)}
             />
           </div>
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
-          {/* 감정 분석 완료 */}
+          {/* 일기 분석 완료 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
-              <p className="text-base leading-5" style={{ color: '#4A3228' }}>감정 분석 완료 알림</p>
+              <p className="text-base leading-5" style={{ color: '#4A3228' }}>일기 분석 완료 알림</p>
             </div>
             <Switch
-              checked={notifications.emotionDone}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, emotionDone: checked }));
-                toast.success('저장됨');
-              }}
-            />
-          </div>
-
-          <Separator style={{ backgroundColor: '#E6E0D6' }} />
-
-          {/* 🎵 음악 추천 도착 */}
-          <div className="flex items-center py-5 px-5 gap-2">
-            <div className="flex-1">
-              <p className="text-base leading-5" style={{ color: '#4A3228' }}>음악 추천 알림</p>
-            </div>
-            <Switch
-              checked={notifications.musicRecommend}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, musicRecommend: checked }));
-                toast.success('저장됨');
-              }}
+              checked={notifications.emotionDone || notifications.musicRecommend}
+              onCheckedChange={handleDiaryAnalysisNotificationChange}
             />
           </div>
 
@@ -1108,10 +1167,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             </div>
             <Switch
               checked={notifications.weeklyStats}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, weeklyStats: checked }));
-                toast.success('저장됨');
-              }}
+              onCheckedChange={(checked) => handleNotificationChange('weeklyStats', checked)}
             />
           </div>
 
@@ -1124,10 +1180,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             </div>
             <Switch
               checked={notifications.reminderCustom}
-              onCheckedChange={(checked) => {
-                setNotifications(prev => ({ ...prev, reminderCustom: checked }));
-                toast.success('저장됨');
-              }}
+              onCheckedChange={(checked) => handleNotificationChange('reminderCustom', checked)}
             />
           </div>
         </CardContent>
