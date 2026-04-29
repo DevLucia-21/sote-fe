@@ -485,17 +485,13 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   // 알림 설정
   useEffect(() => {
     async function setupFCM() {
-      console.log("📌 FCM 설정 시작");
-
       if (Notification.permission !== "granted") {
         await Notification.requestPermission();
       }
 
       const token = await requestFcmToken();
-      console.log("📌 발급된 FCM Token:", token);
 
       if (!token) {
-        console.warn("❌ 토큰 발급 실패");
         return;
       }
 
@@ -513,8 +509,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
     setupFCM();
 
     onForegroundMessage(payload => {
-      console.log("📩 앱 실행 중 메시지:", payload);
-
       new Notification(payload.notification.title, {
         body: payload.notification.body,
         icon: "/icon.png"
@@ -527,7 +521,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   // useEffect(() => {
   //   onForegroundMessage(payload => {
   //     const userId = localStorage.getItem("user_id");
-  //     console.log("📩 앱 실행 중 메시지:", payload);
   //     new Notification(payload.notification.title, {
   //       body: payload.notification.body,
   //       icon: "/icon.png"
@@ -1292,7 +1285,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             className="bg-primary text-white w-full"
             onClick={async () => {
               const token = await requestFcmToken();
-              console.log("📌 발급된 Token:", token);
 
               if (token) {
                 localStorage.setItem("fcmToken", token);
@@ -1310,14 +1302,9 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             className="bg-accent text-white w-full"
             disabled={!userInfo}
             onClick={async () => {
-              console.log("🔥 클릭됨 1");
-
               // 항상 최신 userInfo 사용
               const saved = safeGet("fcmToken");
               const userId = localStorage.getItem("user_id");
-
-              console.log("📌 token:", saved);
-              console.log("📌 userId:", userId);
 
               if (!saved) {
                 toast.error("저장된 FCM 토큰이 없습니다.");
@@ -1338,8 +1325,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
                 console.error(e);
                 toast.error("전송 실패");
               }
-
-              console.log("🔥 클릭됨 2");
             }}
           >
             테스트 알림 보내기
