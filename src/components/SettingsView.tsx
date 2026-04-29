@@ -92,6 +92,9 @@ const NOTIFICATION_TYPE_BY_KEY: Record<NotificationKey, NotificationType> = {
 };
 
 const NOTIFICATION_KEYS = Object.keys(NOTIFICATION_TYPE_BY_KEY) as NotificationKey[];
+const VISIBLE_NOTIFICATION_KEYS = NOTIFICATION_KEYS.filter(
+  key => key !== 'reminderCustom'
+);
 
 const DEFAULT_NOTIFICATIONS: NotificationState = {
   diary: true,
@@ -323,9 +326,9 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
   };
 
   const toggleAllNotifications = () => {
-    const allOn = NOTIFICATION_KEYS.every(key => notifications[key]);
+    const allOn = VISIBLE_NOTIFICATION_KEYS.every(key => notifications[key]);
     const newValue = !allOn;
-    const nextNotifications = NOTIFICATION_KEYS.reduce<NotificationState>((nextState, key) => {
+    const nextNotifications = VISIBLE_NOTIFICATION_KEYS.reduce<NotificationState>((nextState, key) => {
       nextState[key] = newValue;
       return nextState;
     }, { ...notifications });
@@ -1112,8 +1115,7 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
               notifications.challenge &&
               notifications.emotionDone &&
               notifications.musicRecommend &&
-              notifications.weeklyStats &&
-              notifications.reminderCustom
+              notifications.weeklyStats
                 ? '전체 끄기'
                 : '전체 켜기'}
             </Button>
@@ -1134,19 +1136,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
-          {/* 오늘의 챌린지 */}
-          <div className="flex items-center py-5 px-5 gap-2">
-            <div className="flex-1">
-              <p className="text-base leading-5" style={{ color: '#4A3228' }}>오늘의 챌린지 수행 알림</p>
-            </div>
-            <Switch
-              checked={notifications.challenge}
-              onCheckedChange={(checked) => handleNotificationChange('challenge', checked)}
-            />
-          </div>
-
-          <Separator style={{ backgroundColor: '#E6E0D6' }} />
-
           {/* 일기 분석 완료 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
@@ -1160,6 +1149,19 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
 
           <Separator style={{ backgroundColor: '#E6E0D6' }} />
 
+          {/* 오늘의 챌린지 */}
+          <div className="flex items-center py-5 px-5 gap-2">
+            <div className="flex-1">
+              <p className="text-base leading-5" style={{ color: '#4A3228' }}>오늘의 챌린지 수행 알림</p>
+            </div>
+            <Switch
+              checked={notifications.challenge}
+              onCheckedChange={(checked) => handleNotificationChange('challenge', checked)}
+            />
+          </div>
+
+          <Separator style={{ backgroundColor: '#E6E0D6' }} />
+
           {/* 📊 주간 통계 */}
           <div className="flex items-center py-5 px-5 gap-2">
             <div className="flex-1">
@@ -1168,19 +1170,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
             <Switch
               checked={notifications.weeklyStats}
               onCheckedChange={(checked) => handleNotificationChange('weeklyStats', checked)}
-            />
-          </div>
-
-          <Separator style={{ backgroundColor: '#E6E0D6' }} />
-
-          {/* 🕒 사용자 맞춤 알림 */}
-          <div className="flex items-center py-5 px-5 gap-2">
-            <div className="flex-1">
-              <p className="text-base leading-5" style={{ color: '#4A3228' }}>사용자 맞춤 리마인더</p>
-            </div>
-            <Switch
-              checked={notifications.reminderCustom}
-              onCheckedChange={(checked) => handleNotificationChange('reminderCustom', checked)}
             />
           </div>
         </CardContent>
