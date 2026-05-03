@@ -1,12 +1,12 @@
-// 🔥 mockDiaryData 제거, 실제 API 기반 검색 버전
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Search, Calendar as CalendarIcon, X } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import api from '../../services/api';
+import { formatDateToAPI } from '../../utils/date';
 import { DiaryEntry } from './types';
 import { emotionColors, getEmotionLabel } from './noteMapping';
 
@@ -17,49 +17,111 @@ interface DiarySearchDialogProps {
   isEasyMode?: boolean;
 }
 
-export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMode }: DiarySearchDialogProps) {
+type DiaryLike = DiaryEntry & {
+  diaryDate?: string;
+  title?: string;
+  keywords?: Array<string | { content?: string; keyword?: string; name?: string }>;
+};
+
+const normalizeDateKey = (diary: DiaryLike) =>
+  (diary.date || diary.diaryDate || '').split('T')[0];
+
+const asDiaryList = (data: unknown): DiaryLike[] => {
+  if (Array.isArray(data)) return data as DiaryLike[];
+  return data ? [data as DiaryLike] : [];
+};
+
+const getKeywordTexts = (diary: DiaryLike): string[] => {
+  if (!Array.isArray(diary.keywords)) return [];
+
+  return diary.keywords
+    .map((keyword) => {
+      if (typeof keyword === 'string') return keyword;
+      return keyword.content || keyword.keyword || keyword.name || '';
+    })
+    .filter(Boolean);
+};
+
+const matchesEasySearch = (diary: DiaryLike, query: string) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return false;
+
+  const content = diary.content?.toLowerCase() || '';
+  const title = diary.title?.toLowerCase() || '';
+  const keywords = getKeywordTexts(diary).map((keyword) => keyword.toLowerCase());
+
+  return (
+    content.includes(normalizedQuery) ||
+    title.includes(normalizedQuery) ||
+    keywords.some((keyword) => keyword.includes(normalizedQuery))
+  );
+};
+
+const dedupeByDate = (diaries: DiaryLike[]): DiaryEntry[] => {
+  const map = new Map<string, DiaryEntry>();
+
+  diaries.forEach((diary) => {
+    const date = normalizeDateKey(diary);
+    if (!date) return;
+    map.set(date, { ...diary, date } as DiaryEntry);
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
+};
+
+export function DiarySearchDialog({
+  open,
+  onOpenChange,
+  onSelectDiary,
+  isEasyMode = false,
+}: DiarySearchDialogProps) {
   const [keyword, setKeyword] = useState('');
   const [dateSearch, setDateSearch] = useState('');
   const [searchResults, setSearchResults] = useState<DiaryEntry[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
 
-  /** 🔥 API 기반 검색 함수 */
   const handleSearch = async () => {
     setHasSearched(true);
 
+    const query = keyword.trim();
+    const results: DiaryLike[] = [];
+
     try {
-      let results: DiaryEntry[] = [];
-
-      // 1) 날짜 검색
-      if (dateSearch) {
-        const res = await api.get("/api/diaries", {
-          params: { date: dateSearch }
+      if (!isEasyMode && dateSearch) {
+        const res = await api.get('/api/diaries', {
+          params: { date: dateSearch },
         });
-        if (res.data) results.push(res.data);
+        results.push(...asDiaryList(res.data));
       }
 
-      // 2) 키워드 검색
-      if (keyword.trim()) {
-        const res = await api.get(`/api/diaries/keyword/search`, {
-          params: { keyword }
-        });
-        if (res.data) results = [...results, ...res.data];
+      if (query) {
+        try {
+          const res = await api.get('/api/diaries/keyword/search', {
+            params: { keyword: query },
+          });
+          results.push(...asDiaryList(res.data));
+        } catch (error) {
+          console.error('키워드 검색 오류:', error);
+        }
+
+        if (isEasyMode) {
+          try {
+            const res = await api.get('/api/diaries', {
+              params: {
+                from: '2020-01-01',
+                to: formatDateToAPI(new Date()),
+              },
+            });
+            results.push(...asDiaryList(res.data).filter((diary) => matchesEasySearch(diary, query)));
+          } catch (error) {
+            console.error('일기 내용 검색 오류:', error);
+          }
+        }
       }
 
-      // 🔥 이지모드에서는 내용 검색 ❌, 키워드로만 검색 ⭕
-      if (keyword.trim() && isEasyMode) {
-        const k = keyword.toLowerCase();
-        results = results.filter((diary) =>
-          diary.keywords?.some((kw) => kw.toLowerCase().includes(k))
-        );
-      }
-
-      // 3) 중복 제거 (날짜 검색 + 키워드 검색이 겹칠 수 있음)
-      const unique = Array.from(new Map(results.map(d => [d.date, d])).values());
-
-      setSearchResults(unique);
+      setSearchResults(dedupeByDate(results));
     } catch (error) {
-      console.error("검색 오류:", error);
+      console.error('일기 검색 오류:', error);
       setSearchResults([]);
     }
   };
@@ -88,12 +150,13 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          {/* 검색 입력 */}
           <div className="space-y-3">
             <div>
-              <label className="text-sm text-[#4A3228] mb-1.5 block">키워드 검색</label>
+              <label className="text-sm text-[#4A3228] mb-1.5 block">
+                {isEasyMode ? '일기 내용 또는 키워드 검색' : '키워드 검색'}
+              </label>
               <Input
-                placeholder="키워드 입력..."
+                placeholder={isEasyMode ? '내용이나 키워드를 입력하세요' : '키워드를 입력하세요'}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -101,7 +164,6 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
               />
             </div>
 
-            {/* 날짜 검색 (이지모드에서는 숨김) */}
             {!isEasyMode && (
               <div>
                 <label className="text-sm text-[#4A3228] mb-1.5 block">날짜 검색</label>
@@ -115,7 +177,6 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
             )}
           </div>
 
-          {/* 검색 버튼 */}
           <div className="flex gap-2">
             <Button
               onClick={handleSearch}
@@ -131,7 +192,6 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
             </Button>
           </div>
 
-          {/* 검색 결과 */}
           {hasSearched && (
             <div className="mt-6">
               <h4 className="text-sm text-[#4A3228] mb-3">
@@ -140,16 +200,17 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
 
               {searchResults.length === 0 ? (
                 <div className="text-center py-12 text-[#4A3228] opacity-60">
-                  검색 결과가 없습니다.
+                  검색 결과가 없어요.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {searchResults.map((diary, index) => {
-                    const color = emotionColors[diary.emotion];
+                    const date = normalizeDateKey(diary);
+                    const color = diary.emotion ? emotionColors[diary.emotion] : '#95A5A6';
 
                     return (
                       <motion.div
-                        key={diary.date}
+                        key={`${date}-${index}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
@@ -162,21 +223,20 @@ export function DiarySearchDialog({ open, onOpenChange, onSelectDiary, isEasyMod
                             <div className="flex items-center gap-2">
                               <CalendarIcon className="w-4 h-4" style={{ color: '#7B8B4F' }} />
                               <span className="text-sm" style={{ color: '#7B8B4F' }}>
-                                {new Date(diary.date).toLocaleDateString('ko-KR')}
+                                {date ? new Date(date).toLocaleDateString('ko-KR') : '날짜 없음'}
                               </span>
                             </div>
 
                             <div
                               className="px-2 py-1 rounded-full text-xs"
-                              style={{ backgroundColor: color + '20', color }}
+                              style={{ backgroundColor: `${color}20`, color }}
                             >
-                              {getEmotionLabel(diary.emotion)}
+                              {diary.emotion ? getEmotionLabel(diary.emotion) : '분석 없음'}
                             </div>
                           </div>
 
-                          {/* 내용 */}
                           <p className="text-sm line-clamp-2" style={{ color: '#4A3228', opacity: 0.8 }}>
-                            {diary.content}
+                            {diary.content || '작성 내용이 없어요.'}
                           </p>
                         </Card>
                       </motion.div>

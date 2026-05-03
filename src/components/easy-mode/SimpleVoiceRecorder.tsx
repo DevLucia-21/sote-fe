@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import { Mic, Square, Play, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "../../services/api";
+import { formatDateToAPI } from "../../utils/date";
 
 type RecordingStatus = "idle" | "recording" | "stopped";
 
@@ -87,7 +88,7 @@ export function SimpleVoiceRecorder({ onTranscriptComplete, onError }: SimpleVoi
       const formData = new FormData();
       formData.append("file", new File([recordedAudio], `recording-${Date.now()}.webm`, { type: "audio/webm" }));
       formData.append("user_id", localStorage.getItem("user_id") || "0");
-      formData.append("diary_date", new Date().toISOString().split("T")[0]);
+      formData.append("diary_date", formatDateToAPI(new Date()));
       formData.append("do_vad", "true");
 
       const sttRes = await api.post("/ai/stt/transcribe", formData, {

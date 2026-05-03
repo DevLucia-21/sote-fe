@@ -559,6 +559,14 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     return res.data;
   };
 
+  const getErrorStatus = (error: unknown) => {
+    if (typeof error === 'object' && error !== null && 'response' in error) {
+      return (error as { response?: { status?: number } }).response?.status;
+    }
+
+    return undefined;
+  };
+
   const handleSave = async () => {
     if (editMode && editingDiary && !hasEditedContent && !hasEditedKeywords) {
       return;
@@ -576,9 +584,12 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
     if (editMode && editingDiary) {
       const editPayload = {
+        id: (editingDiary as any).id ?? (editingDiary as any).diaryId,
+        diaryId: (editingDiary as any).diaryId ?? (editingDiary as any).id,
         date: editingDiary.date,
         content: content.trim(),
         keywordIds: getSelectedKeywordIds(),
+        emotionType: editingDiary.emotionType ?? null,
       };
 
       try {
@@ -597,6 +608,32 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
           content: editPayload.content,
         });
       } catch (e) {
+        if (isEasyMode && getErrorStatus(e) === 403) {
+          try {
+            await api.delete("/api/diaries", { params: { date: editPayload.date } });
+            const rewriteRes = await api.post("/api/diaries", {
+              date: editPayload.date,
+              content: editPayload.content,
+              keywordIds: editPayload.keywordIds,
+              emotionType: editPayload.emotionType,
+            });
+            const rewrittenDiary = {
+              ...(rewriteRes.data ?? {}),
+              date: editPayload.date,
+              content: editPayload.content,
+              writeType,
+              analysisDisabled: true,
+            };
+
+            markDiaryAsRewritten(editPayload.date);
+            toast.success("일기가 수정되었습니다!");
+            await onSave?.(rewrittenDiary);
+            return;
+          } catch (rewriteError) {
+            console.error("이지모드 과거 일기 재작성 실패:", rewriteError);
+          }
+        }
+
         console.error("일기 수정 실패:", e);
         toast.error("일기 수정 중 문제가 발생했습니다.");
       } finally {

@@ -12,9 +12,64 @@ import { HealthDataView } from '../HealthDataView';
 import { WatchPairingView } from '../settings/WatchPairingView';
 import { characterInfo, type CharacterType } from '../common/characterImages';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { requestFcmToken, onForegroundMessage } from "../../firebase-config";
 
 type ViewType = 'main' | 'profile' | 'health' | 'watch-pairing';
 type Character = CharacterType;
+
+type NotificationKey =
+  | 'diary'
+  | 'challenge'
+  | 'emotionDone'
+  | 'musicRecommend'
+  | 'weeklyStats'
+  | 'reminderCustom';
+
+type NotificationType =
+  | 'DIARY'
+  | 'CHALLENGE'
+  | 'EMOTION_DONE'
+  | 'MUSIC_RECOMMEND'
+  | 'WEEKLY_STATS'
+  | 'REMINDER_CUSTOM';
+
+type NotificationState = Record<NotificationKey, boolean>;
+
+const NOTIFICATION_TYPE_BY_KEY: Record<NotificationKey, NotificationType> = {
+  diary: 'DIARY',
+  challenge: 'CHALLENGE',
+  emotionDone: 'EMOTION_DONE',
+  musicRecommend: 'MUSIC_RECOMMEND',
+  weeklyStats: 'WEEKLY_STATS',
+  reminderCustom: 'REMINDER_CUSTOM',
+};
+
+const NOTIFICATION_KEYS = Object.keys(NOTIFICATION_TYPE_BY_KEY) as NotificationKey[];
+
+const DEFAULT_NOTIFICATIONS: NotificationState = {
+  diary: true,
+  challenge: true,
+  emotionDone: false,
+  musicRecommend: false,
+  weeklyStats: false,
+  reminderCustom: false,
+};
+
+const toEnabledNotifications = (notificationState: NotificationState): NotificationType[] =>
+  NOTIFICATION_KEYS
+    .filter(key => notificationState[key])
+    .map(key => NOTIFICATION_TYPE_BY_KEY[key]);
+
+const fromEnabledNotifications = (enabledNotifications: unknown): NotificationState => {
+  const enabledSet = new Set(
+    Array.isArray(enabledNotifications) ? enabledNotifications : []
+  );
+
+  return NOTIFICATION_KEYS.reduce<NotificationState>((nextState, key) => {
+    nextState[key] = enabledSet.has(NOTIFICATION_TYPE_BY_KEY[key]);
+    return nextState;
+  }, { ...DEFAULT_NOTIFICATIONS });
+};
 
 export function EasySettingsView({ onLogout }) {
   const [currentView, setCurrentView] = useState<ViewType>('main');
@@ -31,10 +86,7 @@ export function EasySettingsView({ onLogout }) {
   });
 
   // ✔ 알림 설정 (UI에는 2개만 표시하지만 내부 구조는 SettingsView 기반)
-  const [notifications, setNotifications] = useState({
-    diary: false,
-    challenge: false,
-  });
+  const [notifications, setNotifications] = useState<NotificationState>(DEFAULT_NOTIFICATIONS);
 
   // ✔ 테마 (SettingsView API 구조 그대로)
   const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
@@ -108,6 +160,72 @@ export function EasySettingsView({ onLogout }) {
 
     loadAll();
   }, []);
+
+  useEffect(() => {
+    const loadSharedSettings = async () => {
+      try {
+        const [notifRes, themeRes] = await Promise.all([
+          api.get('/api/settings/notifications'),
+          api.get('/api/settings/theme'),
+        ]);
+
+        setNotifications(fromEnabledNotifications(notifRes.data.enabledNotifications));
+
+        const savedTheme = localStorage.getItem('theme');
+        const hasLocalTheme = savedTheme === 'dark' || savedTheme === 'easy' || savedTheme === 'light';
+        if (!hasLocalTheme && typeof themeRes.data?.darkMode === 'boolean') {
+          setTheme(themeRes.data.darkMode ? 'dark' : 'light');
+        }
+      } catch (err) {
+        console.error('이지모드 알림/테마 설정 로딩 실패:', err);
+      }
+    };
+
+    loadSharedSettings();
+  }, []);
+
+  useEffect(() => {
+    async function setupFCM() {
+      if (typeof Notification === "undefined") return;
+
+      if (Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return;
+      }
+
+      const token = await requestFcmToken();
+      if (!token) return;
+
+      try {
+        await api.post("/api/settings/token", {
+          token,
+          deviceType: "MOBILE",
+        });
+        localStorage.setItem("fcmToken", token);
+      } catch (error) {
+        console.error("이지모드 FCM 토큰 저장 실패:", error);
+      }
+    }
+
+    setupFCM();
+
+    onForegroundMessage((payload) => {
+      const title = payload.notification?.title;
+      const body = payload.notification?.body;
+
+      if (title && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification(title, {
+          body,
+          icon: "/icon.png",
+        });
+      }
+
+      if (title) {
+        toast.success(title);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
 
@@ -254,6 +372,7 @@ export function EasySettingsView({ onLogout }) {
   // ⭐ 알림 설정 저장 (SettingsView API 완전 동일)
   // --------------------------------------------------------
   const updateNotification = async (key: "diary" | "challenge", checked: boolean) => {
+    const previousState = notifications;
     try {
       // 먼저 상태 미리 반영
       const newState = {
@@ -268,8 +387,8 @@ export function EasySettingsView({ onLogout }) {
       if (newState.challenge) enabledList.push("CHALLENGE");
 
       // 서버 저장
-      await api.patch("/api/settings/notifications", {
-        enabledNotifications: enabledList,
+      await api.put("/api/settings/notifications", {
+        enabledNotifications: toEnabledNotifications(newState),
       });
 
       toast.success("알림 설정이 변경되었습니다.");
@@ -282,6 +401,45 @@ export function EasySettingsView({ onLogout }) {
   // --------------------------------------------------------
   // ⭐ 테마 저장 (SettingsView와 동일)
   // --------------------------------------------------------
+  const saveEasyNotificationSettings = async (
+    nextNotifications: NotificationState,
+    previousNotifications: NotificationState,
+    successMessage = "알림 설정이 변경되었습니다."
+  ) => {
+    setNotifications(nextNotifications);
+
+    try {
+      await api.put("/api/settings/notifications", {
+        enabledNotifications: toEnabledNotifications(nextNotifications),
+      });
+
+      toast.success(successMessage);
+    } catch (err) {
+      console.error("알림 설정 실패:", err);
+      setNotifications(previousNotifications);
+      toast.error("알림 설정 중 오류가 발생했습니다.");
+    }
+  };
+
+  const updateEasyNotification = (key: NotificationKey, checked: boolean) => {
+    const nextState = {
+      ...notifications,
+      [key]: checked,
+    };
+
+    void saveEasyNotificationSettings(nextState, notifications);
+  };
+
+  const updateEasyDiaryAnalysisNotification = (checked: boolean) => {
+    const nextState = {
+      ...notifications,
+      emotionDone: checked,
+      musicRecommend: checked,
+    };
+
+    void saveEasyNotificationSettings(nextState, notifications);
+  };
+
   const updateTheme = async (mode: "light" | "dark" | "easy") => {
     try {
       // 1) React state 업데이트
@@ -759,7 +917,7 @@ export function EasySettingsView({ onLogout }) {
 
             <Switch
               checked={notifications.diary}
-              onCheckedChange={(checked) => updateNotification("diary", checked)}
+              onCheckedChange={(checked) => updateEasyNotification("diary", checked)}
               className="scale-150"
             />
           </div>
@@ -772,8 +930,8 @@ export function EasySettingsView({ onLogout }) {
             </div>
 
             <Switch
-              checked={notifications.challenge}
-              onCheckedChange={(checked) => updateNotification("challenge", checked)}
+              checked={notifications.emotionDone || notifications.musicRecommend}
+              onCheckedChange={updateEasyDiaryAnalysisNotification}
               className="scale-150"
             />
           </div>

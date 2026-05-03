@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { SimpleVoiceRecorder } from './SimpleVoiceRecorder';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
 import { AnalysisResult, hasValidAnalysis, normalizeAnalysisResult } from '../analysis/AnalysisResult';
+import { DiaryDetailView } from '../calendar/DiaryDetailView';
+import { DiaryEntry } from '../calendar/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import { formatDateToAPI } from '../../utils/date';
 
@@ -16,18 +18,85 @@ type DiaryType = 'text' | 'voice';
 export function EasyDiaryEntry() {
   const [diaryType, setDiaryType] = useState<DiaryType>('text');
   const [content, setContent] = useState('');
+  const [existingDiary, setExistingDiary] = useState<any | null>(null);
+  const [isLoadingTodayDiary, setIsLoadingTodayDiary] = useState(true);
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [showSaveCompleteDialog, setShowSaveCompleteDialog] = useState(false);
+  const [saveCompleteDiary, setSaveCompleteDiary] = useState<DiaryEntry | null>(null);
+  const [selectedDetailDiary, setSelectedDetailDiary] = useState<DiaryEntry | null>(null);
+  const [shouldStartAnalysisAfterSave, setShouldStartAnalysisAfterSave] = useState(false);
   const [lengthWarning, setLengthWarning] = useState(false);
   const [sttLimitWarning, setSttLimitWarning] = useState(false);
 
   const todayStr = formatDateToAPI(new Date());
 
+  const normalizeDiaryForDetail = (diary: any, fallbackDate = todayStr): DiaryEntry => {
+    const date = (diary?.date || diary?.diaryDate || fallbackDate).split('T')[0];
+
+    return {
+      ...diary,
+      date,
+      content: diary?.content ?? content,
+      emotion: diary?.emotion || diary?.emotionType || 'APATHY',
+      score: Number(diary?.score ?? diary?.emotionScore ?? 0),
+      note: diary?.note || 'RE',
+    };
+  };
+
   useEffect(() => {
     void api.get('/api/ai/wake').catch(() => {});
   }, []);
+
+  const findDiaryForDate = (data: any, dateStr: string) => {
+    if (Array.isArray(data)) {
+      return data.find((diary) => {
+        const diaryDate = (diary.date || diary.diaryDate || '').split('T')[0];
+        return diaryDate === dateStr;
+      }) ?? null;
+    }
+
+    if (!data) return null;
+
+    const diaryDate = (data.date || data.diaryDate || '').split('T')[0];
+    return (diaryDate === dateStr || (!diaryDate && (data.id || data.content))) ? data : null;
+  };
+
+  useEffect(() => {
+    const loadTodayDiary = async () => {
+      setIsLoadingTodayDiary(true);
+
+      try {
+        const res = await api.get('/api/diaries', {
+          params: { from: todayStr, to: todayStr },
+        });
+        const todayDiary = findDiaryForDate(res.data, todayStr);
+
+        if (todayDiary?.id || todayDiary?.content) {
+          setExistingDiary({
+            ...todayDiary,
+            date: (todayDiary.date || todayDiary.diaryDate || todayStr).split('T')[0],
+          });
+          setContent(todayDiary.content ?? '');
+          setDiaryType('text');
+        } else {
+          setExistingDiary(null);
+          setContent('');
+        }
+      } catch (err: any) {
+        if (err?.response?.status !== 404 && err?.response?.status !== 403) {
+          console.error('오늘 일기 조회 실패:', err);
+        }
+        setExistingDiary(null);
+      } finally {
+        setIsLoadingTodayDiary(false);
+      }
+    };
+
+    loadTodayDiary();
+  }, [todayStr]);
 
   // useEffect(() => { 
   //   const checkTodayDiary = async () => {
@@ -66,6 +135,32 @@ export function EasyDiaryEntry() {
         emotionType: null,
       };
 
+      if (existingDiary) {
+        const editDate = existingDiary.date || todayStr;
+
+        await api.put("/api/diaries", {
+          date: editDate,
+          content: savePayload.content,
+        });
+
+        const updatedDiary = normalizeDiaryForDetail({
+          ...existingDiary,
+          content: savePayload.content,
+          date: editDate,
+        }, editDate);
+
+        setExistingDiary((prev) => ({
+          ...prev,
+          content: savePayload.content,
+          date: editDate,
+        }));
+        setSaveCompleteDiary(updatedDiary);
+        setShouldStartAnalysisAfterSave(false);
+        setShowSaveCompleteDialog(true);
+        toast.success("오늘의 일기를 수정했어요.");
+        return;
+      }
+
       let res;
       if (diaryType === "text") {
         res = await api.post("/api/diaries", savePayload);
@@ -79,6 +174,10 @@ export function EasyDiaryEntry() {
       }
 
       const savedDiary = res.data;
+      setExistingDiary({
+        ...savedDiary,
+        date: (savedDiary.date || savedDiary.diaryDate || todayStr).split('T')[0],
+      });
       
       // 🔥 DiaryEntry와 동일: 분석 요청을 AnalysisLoading이 담당하게 넘김
       setPendingAnalysisPayload({
@@ -100,11 +199,48 @@ export function EasyDiaryEntry() {
     }
   };
 
+  const handleSaveCompleteClose = () => {
+    setShowSaveCompleteDialog(false);
+
+    if (shouldStartAnalysisAfterSave && pendingAnalysisPayload) {
+      setShouldStartAnalysisAfterSave(false);
+      setAnalysisState("analyzing");
+    }
+  };
+
+  const handleSaveCompleteConfirm = () => {
+    const diaryForDetail = saveCompleteDiary || (existingDiary ? normalizeDiaryForDetail(existingDiary) : null);
+
+    setShowSaveCompleteDialog(false);
+    setSaveCompleteDiary(null);
+
+    if (diaryForDetail) {
+      setSelectedDetailDiary(diaryForDetail);
+    }
+  };
+
+  if (selectedDetailDiary) {
+    return (
+      <DiaryDetailView
+        diary={selectedDetailDiary}
+        onBack={() => setSelectedDetailDiary(null)}
+        onEdit={() => {
+          setExistingDiary(selectedDetailDiary);
+          setContent(selectedDetailDiary.content ?? '');
+          setDiaryType('text');
+          setSelectedDetailDiary(null);
+        }}
+        isEasyMode
+      />
+    );
+  }
+
   if (analysisState === "analyzing") {
     return (
       <AnalysisLoading
         payload={pendingAnalysisPayload}
         instrument="piano"
+        triggerAnalysis={false}
         onRetry={() => setAnalysisState("analyzing")}
         onComplete={(result) => {
           const normalizedResult = normalizeAnalysisResult(result);
@@ -165,11 +301,29 @@ export function EasyDiaryEntry() {
   }
 
   // 일기 작성 화면
+  if (isLoadingTodayDiary) {
+    return (
+      <div className="p-6 min-h-screen" style={{ backgroundColor: '#F5F1E8' }}>
+        <p className="text-center text-xl" style={{ color: '#4A3228' }}>
+          오늘의 일기를 확인하고 있어요...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6 min-h-screen" style={{ backgroundColor: '#F5F1E8' }}>
       <h1 className="text-4xl" style={{ color: '#4A3228' }}>
         오늘의 일기 작성
       </h1>
+
+      {existingDiary && (
+        <Card className="p-5" style={{ backgroundColor: '#FFF8E6', borderColor: '#E5D8AA' }}>
+          <p className="text-xl" style={{ color: '#4A3228' }}>
+            오늘 작성한 일기를 불러왔어요. 여기에서 바로 수정할 수 있어요.
+          </p>
+        </Card>
+      )}
 
       {/* 입력 방식 선택 */}
       <Card className="p-6" style={{ backgroundColor: 'white', borderColor: '#E5E5E5' }}>
@@ -291,6 +445,28 @@ export function EasyDiaryEntry() {
       >
         일기 완성하기
       </Button>
+
+      <Dialog
+        open={showSaveCompleteDialog}
+        onOpenChange={(open) => {
+          if (!open) handleSaveCompleteClose();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>저장되었습니다.</DialogTitle>
+            <DialogDescription>
+              오늘의 일기가 저장되었습니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button onClick={handleSaveCompleteConfirm}>
+              확인
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showWarningModal} onOpenChange={setShowWarningModal}>
         <DialogContent>

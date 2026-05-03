@@ -25,6 +25,7 @@ import { getNote } from "../calendar/noteMapping";
 import { DiaryEntry, NoteType } from "../calendar/types";
 import { DiaryWrite } from "../diary/DiaryWrite";
 import { toast } from "sonner";
+import { hasRewrittenDiaryStatus } from "../../utils/rewrittenDiaryStatus";
 
 /* -----------------------------------------
     악기 사운드 매핑
@@ -52,6 +53,31 @@ const NOTE_MAP = {
   HSOL: "G5",
   HLA: "A5",
   HSI: "B5",
+};
+
+const normalizeEmotion = (emotion?: string): DiaryEntry["emotion"] => {
+  const emotionMap: Record<string, DiaryEntry["emotion"]> = {
+    JOY: "JOY",
+    SADNESS: "SADNESS",
+    ANGER: "ANGER",
+    APATHY: "APATHY",
+    SENSITIVE: "SENSITIVE",
+    "기쁨": "JOY",
+    "슬픔": "SADNESS",
+    "분노": "ANGER",
+    "화남": "ANGER",
+    "무기력": "APATHY",
+    "예민": "SENSITIVE",
+  };
+
+  return emotion ? emotionMap[emotion] || "APATHY" : "APATHY";
+};
+
+const getCalendarNoteList = (data: any): DiaryEntry[] => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.notes)) return data.notes;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
 };
 
 const SOUNDFONT_BASE =
@@ -86,7 +112,10 @@ export function EasyCalendarView() {
   const [tempYear, setTempYear] = useState<number | null>(null);
   const [tempMonth, setTempMonth] = useState<number | null>(null);
 
-  const years = [2020, 2021, 2022, 2023, 2024, 2025];
+  const years = Array.from(
+    { length: new Date().getFullYear() - 2019 },
+    (_, index) => 2020 + index,
+  );
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   /* -----------------------------------------
@@ -97,6 +126,8 @@ export function EasyCalendarView() {
       setLoading(true);
       const y = currentDate.getFullYear();
       const m = currentDate.getMonth() + 1;
+      const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
+      const monthEnd = `${y}-${String(m).padStart(2, "0")}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
 
       const currentRes = await api.get(`/api/calendar-notes/${y}/${m}`);
 
@@ -106,12 +137,17 @@ export function EasyCalendarView() {
       const nextMonth = m === 12 ? 1 : m + 1;
       const nextYear = m === 12 ? y + 1 : y;
 
-      const [prevRes, nextRes] = await Promise.all([
+      const [prevRes, nextRes, monthDiariesRes] = await Promise.all([
         api.get(`/api/calendar-notes/${prevYear}/${prevMonth}`),
         api.get(`/api/calendar-notes/${nextYear}/${nextMonth}`),
+        api.get("/api/diaries", { params: { from: monthStart, to: monthEnd } }),
       ]);
 
-      const all = [...prevRes.data, ...currentRes.data, ...nextRes.data];
+      const all = [
+        ...getCalendarNoteList(prevRes.data),
+        ...getCalendarNoteList(currentRes.data),
+        ...getCalendarNoteList(nextRes.data),
+      ];
 
       const emotionMap = {
         "기쁨": "JOY",
@@ -127,8 +163,25 @@ export function EasyCalendarView() {
         const dateStr = d.date.split("T")[0];
         map[dateStr] = {
           ...d,
-          emotion: emotionMap[d.emotionLabel] || "APATHY",
+          emotion: normalizeEmotion(d.emotionLabel || (d as any).emotionType || (d as any).emotion),
           contentLength: d.contentLength || 0,
+          analysisDisabled: hasRewrittenDiaryStatus(dateStr) || (d as any).analysisDisabled,
+        };
+      });
+
+      const monthDiaries = Array.isArray(monthDiariesRes.data) ? monthDiariesRes.data : [];
+      monthDiaries.forEach((diary: any) => {
+        const normalizedDiary = normalizeDiary(diary);
+        const dateStr = normalizedDiary.date;
+        if (!dateStr) return;
+
+        map[dateStr] = {
+          ...map[dateStr],
+          ...normalizedDiary,
+          analysisDisabled:
+            hasRewrittenDiaryStatus(dateStr) ||
+            normalizedDiary.analysisDisabled ||
+            !map[dateStr],
         };
       });
 
@@ -224,6 +277,34 @@ export function EasyCalendarView() {
       "0"
     )}`;
 
+  const normalizeDiary = (diary: any, fallbackDate?: string): DiaryEntry => {
+    const date = diary.date || diary.diaryDate || fallbackDate || "";
+    const normalizedDate = date.split("T")[0];
+
+    return {
+      ...diary,
+      date: normalizedDate,
+      emotion: normalizeEmotion(diary.emotionLabel || diary.emotionType || diary.emotion),
+      contentLength: diary.contentLength || diary.content?.length || 0,
+      analysisDisabled: hasRewrittenDiaryStatus(normalizedDate) || diary.analysisDisabled,
+    };
+  };
+
+  const fetchDiaryByDate = async (dateStr: string) => {
+    const rangeRes = await api.get("/api/diaries", {
+      params: { from: dateStr, to: dateStr },
+    });
+
+    if (Array.isArray(rangeRes.data)) {
+      return rangeRes.data.find((diary) => {
+        const diaryDate = (diary.date || diary.diaryDate || "").split("T")[0];
+        return diaryDate === dateStr;
+      });
+    }
+
+    return rangeRes.data;
+  };
+
   /* -----------------------------------------
       날짜 이동
   ----------------------------------------- */
@@ -276,11 +357,11 @@ export function EasyCalendarView() {
 
     const finalDiary = {
       ...diary,
-      emotion: emotionMap[diary.emotionLabel] || "APATHY",
+      emotion: normalizeEmotion(diary.emotionLabel || diary.emotionType || diary.emotion),
       date: diary.date.split("T")[0],
     };
 
-    setSelectedDiary(finalDiary);
+    setSelectedDiary(normalizeDiary(diary, dateStr));
   };
 
   /* -----------------------------------------
@@ -292,11 +373,49 @@ export function EasyCalendarView() {
     setIsWriteDialogOpen(true);
   };
 
-  const handleDiarySave = () => {
+  const handleDiarySave = async (savedDiary?: any) => {
+    const savedDate = editingDiary?.date || selectedDate;
+
     setIsWriteDialogOpen(false);
     setEditingDiary(null);
     setSelectedDate(undefined);
-    loadMonthDiaries();
+    await loadMonthDiaries();
+
+    if (!savedDate) return;
+
+    const fallbackDiary = savedDiary
+      ? normalizeDiary(savedDiary, savedDate)
+      : null;
+
+    if (fallbackDiary) {
+      setMonthDiaries((prev) => ({
+        ...prev,
+        [savedDate]: {
+          ...prev[savedDate],
+          ...fallbackDiary,
+          analysisDisabled: fallbackDiary.analysisDisabled,
+        },
+      }));
+    }
+
+    try {
+      const latestDiary = await fetchDiaryByDate(savedDate);
+      const detailDiary = latestDiary ?? fallbackDiary;
+      if (detailDiary) {
+        setSelectedDiary(normalizeDiary({
+          ...detailDiary,
+          analysisDisabled: fallbackDiary?.analysisDisabled || (detailDiary as any).analysisDisabled,
+        }, savedDate));
+      }
+    } catch (error) {
+      if (fallbackDiary) {
+        setSelectedDiary(fallbackDiary);
+        return;
+      }
+
+      console.error("저장된 일기 상세 재조회 실패:", error);
+      toast.error("저장된 일기를 다시 불러오지 못했습니다.");
+    }
   };
 
   /* -----------------------------------------
@@ -527,7 +646,7 @@ export function EasyCalendarView() {
               const isPast = dateObj < today;
 
               if (diary) {
-                const note = getNote(diary.emotion, diary.score);
+                const note = diary.analysisDisabled ? null : getNote(diary.emotion, diary.score);
                 console.log(
                   `🎵 [Calendar] ${key} | emotion=${diary.emotion}, score=${diary.score} → note=${note}`
                 );
@@ -560,7 +679,6 @@ export function EasyCalendarView() {
             {[
               ["#FFD700", "기쁨"],
               ["#4A90E2", "슬픔"],
-              ["#E74C3C", "분노"],
               ["#E74C3C", "화남"],
               ["#9B59B6", "예민"],
               ["#95A5A6", "무기력"],
@@ -588,7 +706,8 @@ export function EasyCalendarView() {
         open={isSearchOpen}
         onOpenChange={setIsSearchOpen}
         onSelectDiary={(d) => {
-          setSelectedDiary(d);
+          const dateStr = (d.date || (d as any).diaryDate || '').split("T")[0];
+          setSelectedDiary(normalizeDiary(d, dateStr));
           setIsSearchOpen(false);
         }}
         isEasyMode
