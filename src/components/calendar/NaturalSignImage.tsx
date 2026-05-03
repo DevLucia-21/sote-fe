@@ -3,9 +3,12 @@ import naturalSignImage from '../../assets/natural-sign.svg';
 
 interface NaturalSignImageProps {
   className?: string;
+  isEasyMode?: boolean;
 }
 
-export function NaturalSignImage({ className }: NaturalSignImageProps) {
+export function NaturalSignImage({ className, isEasyMode = false }: NaturalSignImageProps) {
+  const translateY = isEasyMode ? '-7px' : '3px';
+
   return (
     <img
       src={naturalSignImage}
@@ -14,8 +17,9 @@ export function NaturalSignImage({ className }: NaturalSignImageProps) {
       style={{
         width: '26px',
         height: '56px',
+        opacity: 'var(--staff-line-opacity, 0.4)',
         display: 'block',
-        transform: 'rotate(-8deg) translateY(4px)',
+        transform: `rotate(-8deg) translateY(${translateY})`,
         transformOrigin: 'center',
       }}
     />

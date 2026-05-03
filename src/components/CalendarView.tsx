@@ -147,16 +147,39 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     "SENSITIVE": "SENSITIVE",
   };
 
+  const hasDiaryAnalysisFields = (diary: any) => {
+    return Boolean(
+      diary?.emotionLabel ||
+      diary?.emotionType ||
+      diary?.emotion ||
+      diary?.score ||
+      diary?.emotionScore ||
+      diary?.emotionReason ||
+      diary?.selectedTrackTitle ||
+      diary?.selectedTrackArtist ||
+      diary?.reason ||
+      diary?.description ||
+      diary?.music?.title ||
+      diary?.music?.artist ||
+      diary?.analysisStatus === 'COMPLETED'
+    );
+  };
+
   const normalizeDiary = (diary: any, fallbackDate?: string) => {
     const date = diary.date || diary.diaryDate || fallbackDate || '';
     const normalizedDate = date.split("T")[0];
+    const analysisDisabled =
+      hasRewrittenDiaryStatus(normalizedDate) ||
+      diary.analysisDisabled ||
+      diary.analysisStatus === 'FAILED' ||
+      !hasDiaryAnalysisFields(diary);
 
     return {
       ...diary,
       date: normalizedDate,
       emotion: diary.emotion || emotionMap[diary.emotionLabel] || emotionMap[diary.emotionType] || "APATHY",
       contentLength: diary.contentLength || diary.content?.length || 0,
-      analysisDisabled: hasRewrittenDiaryStatus(normalizedDate),
+      analysisDisabled,
     };
   };
 
@@ -316,6 +339,10 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       return;
     }
 
+    if (optimisticDiary && hasDiaryAnalysisFields(optimisticDiary)) {
+      return;
+    }
+
     try {
       const diary = await fetchDiaryByDate(savedDate);
 
@@ -365,7 +392,6 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           '예민': 'SENSITIVE'
         };
 
-        console.log("🔍 [calendar-notes 현재월 RAW]", currentRes.data);
         // 1️⃣ calendar-notes 데이터 기반 기본 map 구성
         const map: Record<string, any> = {};
         all.forEach((n) => {
@@ -384,12 +410,15 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           const dateStr = normalizedDiary.date;
 
           if (!dateStr) return;
+          const hasCalendarNoteAnalysis = hasDiaryAnalysisFields(map[dateStr]);
 
           map[dateStr] = {
             ...map[dateStr],
             ...normalizedDiary,
             contentLength: normalizedDiary.content?.length ?? normalizedDiary.contentLength ?? 0,
-            analysisDisabled: hasRewrittenDiaryStatus(dateStr),
+            analysisDisabled:
+              hasRewrittenDiaryStatus(dateStr) ||
+              (!hasCalendarNoteAnalysis && normalizedDiary.analysisDisabled),
           };
         });
 
@@ -478,7 +507,6 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           onload: () => {
             samplerRef.current = sampler;
             setSamplerLoaded(true);
-            console.log("🎵 CalendarView sampler loaded");
           },
         }).toDestination();
       } catch (e) {
@@ -513,7 +541,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
         const dateKey = getDayKey(day);
         const diary = monthNotes[dateKey];
 
-        if (diary) {
+        if (diary && !diary.analysisDisabled && diary.emotion && Number.isFinite(Number(diary.score))) {
           const note = getNote(diary.emotion, diary.score);
           const midiNote = NOTE_MAP[note];
 

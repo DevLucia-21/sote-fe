@@ -5,11 +5,11 @@ import { ArrowLeft, FileText, Mic, Pencil, Image, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { DiaryEntry } from './types';
-import { emotionColors, getEmotionLabel } from './noteMapping';
 import { EmotionCard } from '../analysis/EmotionCard';
 import { MusicCard } from '../analysis/MusicCard';
 import { ChallengeCard } from '../analysis/ChallengeCard';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
+import { hasValidAnalysis, normalizeAnalysisResult } from '../analysis/AnalysisResult';
 import { CharacterType } from '../common/characterImages';
 import { KeywordChip } from '../diary/KeywordChip';
 import { markDeletedDiaryAnalysisWarning } from '../../utils/deletedDiaryAnalysisWarning';
@@ -34,6 +34,8 @@ interface DiaryDetailViewProps {
 export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, characterType }: DiaryDetailViewProps) {
   const [diaryData, setDiaryData] = useState<DiaryEntry | null>(null);
   const [analysisData, setAnalysisData] = useState<AnalysisResultType | null>(null);
+  const [analysisUnavailable, setAnalysisUnavailable] = useState(false);
+  const [analysisError, setAnalysisError] = useState(false);
   const [loading, setLoading] = useState(true);
   const characterToInstrument: Record<string, string> = {
     "PIANO": "piano",
@@ -59,8 +61,8 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     return undefined;
   };
 
-  const hasAnalysisFields = (raw: any) => {
-    return Boolean(raw?.emotionLabel || raw?.emotionReason || raw?.selectedTrackTitle || raw?.selectedTrackArtist);
+  const isAnalysisUnavailableStatus = (status?: number) => {
+    return status === 204 || status === 404 || status === 409;
   };
 
   const isAnalysisPendingResponse = (raw: any) => {
@@ -77,10 +79,14 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     }
 
     if (typeof raw === 'object') {
-      return Object.keys(raw).length === 0 || !hasAnalysisFields(raw);
+      return Object.keys(raw).length === 0 || !hasValidAnalysis(raw);
     }
 
     return false;
+  };
+
+  const hasDiaryAnalysisFields = (raw: any) => {
+    return hasValidAnalysis(raw) || raw?.analysisStatus === 'COMPLETED';
   };
 
   const fetchDiaryByDate = async (dateStr: string) => {
@@ -116,46 +122,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     return res.data;
   };
 
-  const createFallbackAnalysisData = (diaryData: any): AnalysisResultType => {
-    if (hasRewrittenDiaryStatus(diaryData.date) || diaryData.analysisDisabled) {
-      return {
-        id: `rewritten-${diaryData.id ?? diaryData.date}`,
-        date: diaryData.date,
-        emotion: "기쁨",
-        confidence: 0,
-        reason: "재작성으로 분석 결과가 없습니다.",
-        description: "재작성한 일기는 저장만 되고 감정 분석, 음악 추천, 챌린지 추천은 표시되지 않아요.",
-      } as AnalysisResultType;
-    }
-
-    const emotionMap: Record<string, any> = {
-      JOY: "기쁨",
-      SADNESS: "슬픔",
-      ANGER: "분노",
-      APATHY: "무기력",
-      SENSITIVE: "예민",
-      "기쁨": "기쁨",
-      "슬픔": "슬픔",
-      "분노": "분노",
-      "화남": "화남",
-      "무기력": "무기력",
-      "예민": "예민",
-    };
-
-    const emotion = emotionMap[diaryData.emotion] || emotionMap[diaryData.emotionLabel] || "기쁨";
-    const score = Number(diaryData.score ?? diaryData.emotionScore ?? 3);
-    const confidence = score <= 5 ? Math.round((score / 5) * 100) : Math.round(score * 100);
-
-    return {
-      id: `fallback-${diaryData.id}`,
-      date: diaryData.date,
-      emotion,
-      confidence: Math.min(Math.max(confidence, 0), 100),
-      reason: "분석 결과를 아직 불러오지 못했어요.",
-      description: "일기 내용은 저장되어 있어요. 분석 결과가 준비되면 다시 표시됩니다.",
-    } as AnalysisResultType;
-  };
-
   async function fetchChallenge() {
     try {
       const res = await api.get("/api/challenge/status");
@@ -170,6 +136,9 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     async function fetchData() {
       try {
         setLoading(true);
+        setAnalysisData(null);
+        setAnalysisUnavailable(false);
+        setAnalysisError(false);
 
         const fetchUserProfile = async () => {
           const res = await api.get("/api/users/profile");
@@ -192,60 +161,56 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
         }
 
         setDiaryData(diaryData);
-        console.log("일기 상세", diaryData)
 
-        const isRewrittenDiary = hasRewrittenDiaryStatus(diaryData.date) || diaryData.analysisDisabled;
+        const isRewrittenDiary = hasRewrittenDiaryStatus(diaryData.date);
 
-        if (isRewrittenDiary) {
-          setAnalysisData(createFallbackAnalysisData(diaryData));
+        if (isRewrittenDiary || diaryData.analysisDisabled) {
+          setAnalysisUnavailable(true);
           return;
         }
 
-        const fetchAnalysisWithRetry = async (diaryId: number, retries = 6, delayMs = 1500) => {
-          for (let attempt = 0; attempt <= retries; attempt += 1) {
-            try {
-              const res = await api.get(`/api/analysis/${diaryId}`);
+        const inlineAnalysisData = normalizeAnalysisResult(
+          (diaryData as any).analysisResult ?? diaryData
+        );
 
-              if (isAnalysisPendingResponse(res.data)) {
-                throw Object.assign(new Error("Analysis result is empty"), {
-                  response: { status: 409 },
-                });
-              }
+        if (inlineAnalysisData) {
+          setAnalysisData(inlineAnalysisData);
+          setAnalysisUnavailable(false);
+          return;
+        }
 
-              return res.data;
-            } catch (error) {
-              const status = getErrorStatus(error);
-              const isRetryable = status === 404 || status === 409;
+        const fetchAnalysis = async (diaryId: number) => {
+          const res = await api.get(`/api/analysis/${diaryId}`);
 
-              if (!isRetryable || attempt === retries) {
-                throw error;
-              }
-
-              await new Promise((resolve) => setTimeout(resolve, delayMs));
-            }
+          if (res.status === 204 || isAnalysisPendingResponse(res.data)) {
+            return null;
           }
 
-          return null;
+          return res.data;
         };
 
         let raw;
         try {
-          raw = await fetchAnalysisWithRetry(diaryData.id);
+          raw = await fetchAnalysis(diaryData.id);
         } catch (error) {
-          if (getErrorStatus(error) === 404 || getErrorStatus(error) === 409) {
-            console.warn("분석 결과가 아직 없어 기본 정보로 상세를 표시합니다:", diaryData.id);
-            setAnalysisData(createFallbackAnalysisData(diaryData));
+          if (isAnalysisUnavailableStatus(getErrorStatus(error))) {
+            setAnalysisUnavailable(true);
             return;
           }
 
-          throw error;
+          console.error("분석 결과 조회 실패:", error);
+          setAnalysisError(true);
+          return;
         }
 
-        console.log("🔥🔥 [Analysis Raw Response]", JSON.stringify(raw, null, 2));
+        if (!raw || !hasDiaryAnalysisFields(raw)) {
+          setAnalysisUnavailable(true);
+          return;
+        }
 
-        let coverUrl = raw.selectedTrackCoverImageUrl;
+        let coverUrl = raw.selectedTrackCoverImageUrl ?? raw.music?.coverImageUrl;
 
-        if (!coverUrl) {
+        if (!coverUrl && raw.selectedTrackTitle) {
           try {
             const rewardDate = new Date(diaryData.date);
             const lpRes = await api.get("/api/lp/monthly", {
@@ -258,21 +223,10 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
 
             if (reward?.albumImageUrl || reward?.imageUrl) {
               coverUrl = reward.albumImageUrl || reward.imageUrl;
-              console.log("🎉 LP 목록에서 이미지 보정됨:", coverUrl);
             }
           } catch (e) {
-            console.log("⚠ LP 목록 조회 실패:", e);
           }
         }
-
-        const musicData = {
-          title: raw.selectedTrackTitle,
-          artist: raw.selectedTrackArtist,
-          genre: raw.selectedTrackGenre,
-          reason: raw.selectedTrackReason,
-          album: raw.selectedTrackAlbum,
-          coverImageUrl: coverUrl,
-        };
 
         const challenge = await fetchChallenge();
         const mappedChallenge = challenge
@@ -286,14 +240,19 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
             }
           : null;
 
-        const mappedAnalysisData: AnalysisResultType = {
-          emotion: raw.emotionLabel,
-          confidence: Math.round(raw.emotionScore * 100),
-          reason: raw.emotionReason,
-          description: `${raw.emotionLabel}의 감정이 느껴지는 하루였어요.`,
-          music: musicData,
-          challenge: mappedChallenge,
-        };
+        const mappedAnalysisData = normalizeAnalysisResult({
+          ...raw,
+          selectedTrackCoverImageUrl: coverUrl,
+          music: raw.music
+            ? { ...raw.music, coverImageUrl: raw.music.coverImageUrl ?? coverUrl }
+            : undefined,
+          challenge: raw.challenge ?? mappedChallenge,
+        });
+
+        if (!mappedAnalysisData) {
+          setAnalysisUnavailable(true);
+          return;
+        }
 
         setAnalysisData(mappedAnalysisData);
 
@@ -305,7 +264,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     }
 
     fetchData();
-  }, [diary.date]);
+  }, [diary]);
 
   const handleDelete = async () => {
     try {
@@ -322,13 +281,38 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     }
   };
 
-  if (loading || !diaryData || !analysisData) {
+  if (loading || !diaryData) {
     return <div className="flex justify-center items-center min-h-screen py-20">로딩 중...</div>;
   }
 
   const detailDiary = diaryData;
-  const color = emotionColors[analysisData.emotion] || '#7B8B4F';
-  const isRewrittenDiary = hasRewrittenDiaryStatus(detailDiary.date) || !!detailDiary.analysisDisabled;
+  const analysisEmotion = analysisData?.emotion;
+  const isRewrittenDiary = hasRewrittenDiaryStatus(detailDiary.date);
+  const showAnalysisUnavailable = analysisUnavailable || (!analysisData && !analysisError);
+  const analysisUnavailableMessage = isRewrittenDiary
+    ? "재작성으로 분석 결과가 없습니다."
+    : "분석 결과가 없습니다.";
+  const formattedDetailDate = (() => {
+    const parsed = detailDiary.date ? new Date(detailDiary.date) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return detailDiary.date || '';
+
+    return parsed.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+    });
+  })();
+
+  const formattedShortDate = (() => {
+    const parsed = detailDiary.date ? new Date(detailDiary.date) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) return detailDiary.date || '';
+
+    return parsed.toLocaleDateString('ko-KR', {
+      month: 'long',
+      day: 'numeric',
+    });
+  })();
   
   const getWriteTypeIcon = () => {
     switch (detailDiary.writeType) {
@@ -401,12 +385,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           className="text-center mb-8"
         >
           <p className="text-primary">
-            {new Date(detailDiary.date).toLocaleDateString('ko-KR', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              weekday: 'long',
-            })}
+            {formattedDetailDate}
           </p>
         </motion.div>
 
@@ -419,10 +398,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
             <Card className="overflow-hidden border-border shadow-lg p-6 bg-card">
               <div className="flex items-start justify-between mb-4">
                 <h3 className="text-foreground">
-                  {new Date(detailDiary.date).toLocaleDateString('ko-KR', {
-                    month: 'long',
-                    day: 'numeric',
-                  })} 일기
+                  {formattedShortDate} 일기
                 </h3>
 
                 {detailDiary.imageUrl && (
@@ -451,7 +427,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
                       <KeywordChip
                         key={index}
                         keyword={`#${keyword}`}
-                        emotion={analysisData.emotion}
+                        emotion={analysisEmotion}
                       />
                     ))}
                   </div>
@@ -482,7 +458,25 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
             </Card>
           </motion.div>
 
-          {!isRewrittenDiary && (
+          {showAnalysisUnavailable && (
+            <Card className="border-border shadow-sm p-6 bg-card">
+              <p className="text-base text-foreground">{analysisUnavailableMessage}</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                일기 내용은 정상적으로 저장되어 있어요.
+              </p>
+            </Card>
+          )}
+
+          {analysisError && (
+            <Card className="border-border shadow-sm p-6 bg-card">
+              <p className="text-base text-foreground">분석 결과를 불러오지 못했습니다.</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                잠시 후 다시 시도해주세요.
+              </p>
+            </Card>
+          )}
+
+          {!showAnalysisUnavailable && analysisData && (
             <EmotionCard
               emotion={analysisData.emotion}
               confidence={analysisData.confidence}
@@ -493,7 +487,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
             />
           )}
 
-          {!isEasyMode && !isRewrittenDiary && analysisData.music && (
+          {!isEasyMode && !showAnalysisUnavailable && analysisData?.music && (
             <MusicCard
               title={analysisData.music.title}
               artist={analysisData.music.artist}
@@ -506,8 +500,8 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           )}
 
           {!isEasyMode &&
-            !isRewrittenDiary &&
-            analysisData.challenge &&
+            !showAnalysisUnavailable &&
+            analysisData?.challenge &&
             isToday(detailDiary.date) && (
             <ChallengeCard
               challenge={analysisData.challenge}

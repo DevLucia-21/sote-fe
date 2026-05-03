@@ -14,7 +14,7 @@ import { AnswerSheet } from './questions/AnswerSheet';
 import { KeywordChip } from './diary/KeywordChip';
 import { isDailyQuestionEnabled } from "../utils/settings";
 import { AnalysisLoading } from './analysis/AnalysisLoading';
-import { AnalysisResult } from './analysis/AnalysisResult';
+import { AnalysisResult, hasValidAnalysis, normalizeAnalysisResult } from './analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType, EmotionType } from './analysis/types';
 import { Answer } from './questions/types';
 import {
@@ -544,8 +544,16 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
         triggerAnalysis={false}
         onRetry={handleAnalysisRetry}
         onComplete={(result) => {
-          setAnalysisResult(result);
-          setAnalysisState("completed");
+          const normalizedResult = normalizeAnalysisResult(result);
+
+          if (hasValidAnalysis(normalizedResult)) {
+            setAnalysisResult(normalizedResult);
+            setAnalysisState("completed");
+          } else {
+            setAnalysisResult(null);
+            setAnalysisState("idle");
+            toast.info("일기는 저장되었고, 분석 결과는 표시하지 않을게요.");
+          }
         }}
       />
     );

@@ -34,12 +34,16 @@ const instrumentInfoMap = {
 
 function mapBackendToFrontend(raw: any) {
   return {
-    date: raw.analysisDate,
-    emotion: raw.emotionLabel,
-    confidence: Math.round(raw.emotionScore * 100),
-    reason: raw.emotionReason,
-    description: raw.emotionReason,
-    music: raw.selectedTrackTitle
+    date: raw.date ?? raw.analysisDate,
+    emotion: raw.emotion ?? raw.emotionLabel,
+    confidence: raw.confidence ?? (
+      Number.isFinite(Number(raw.emotionScore))
+        ? Math.min(Math.max(Math.round(Number(raw.emotionScore) * 100), 0), 100)
+        : 0
+    ),
+    reason: raw.reason ?? raw.description ?? raw.emotionReason,
+    description: raw.description ?? raw.reason ?? raw.emotionReason,
+    music: raw.music ?? (raw.selectedTrackTitle
       ? {
           title: raw.selectedTrackTitle,
           artist: raw.selectedTrackArtist,
@@ -48,13 +52,23 @@ function mapBackendToFrontend(raw: any) {
           reason: raw.selectedTrackReason,
           coverImageUrl: raw.selectedTrackCoverImageUrl || null,
         }
-      : null,
+      : null),
     challenge: raw.challenge || null,
   };
 }
 
 function hasAnalysisFields(raw: any) {
-  return Boolean(raw?.emotionLabel || raw?.emotionReason || raw?.selectedTrackTitle || raw?.selectedTrackArtist);
+  return Boolean(
+    raw?.emotionLabel ||
+    raw?.emotionReason ||
+    raw?.selectedTrackTitle ||
+    raw?.selectedTrackArtist ||
+    raw?.emotion ||
+    raw?.reason ||
+    raw?.description ||
+    raw?.music?.title ||
+    raw?.music?.artist
+  );
 }
 
 function isAnalysisPendingResponse(raw: any) {

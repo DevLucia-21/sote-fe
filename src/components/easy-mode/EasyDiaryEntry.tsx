@@ -7,7 +7,7 @@ import { Type, Mic } from 'lucide-react';
 import { toast } from 'sonner';
 import { SimpleVoiceRecorder } from './SimpleVoiceRecorder';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
-import { AnalysisResult } from '../analysis/AnalysisResult';
+import { AnalysisResult, hasValidAnalysis, normalizeAnalysisResult } from '../analysis/AnalysisResult';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 
 type DiaryType = 'text' | 'voice';
@@ -102,8 +102,16 @@ export function EasyDiaryEntry() {
         instrument="piano"
         onRetry={() => setAnalysisState("analyzing")}
         onComplete={(result) => {
-          setAnalysisResult(result);
-          setAnalysisState("completed");
+          const normalizedResult = normalizeAnalysisResult(result);
+
+          if (hasValidAnalysis(normalizedResult)) {
+            setAnalysisResult(normalizedResult);
+            setAnalysisState("completed");
+          } else {
+            setAnalysisResult(null);
+            setAnalysisState("idle");
+            toast.info("일기는 저장되었고, 분석 결과는 표시하지 않을게요.");
+          }
         }}
       />
     );

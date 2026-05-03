@@ -11,6 +11,7 @@ import { KeywordChip } from './KeywordChip';
 import { WriteType, EmotionType, Diary } from './types';
 import { addDiaryEntry, mockDiaryData } from '../calendar/mockData';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
+import { normalizeAnalysisResult } from '../analysis/AnalysisResult';
 import { AnalysisResult as AnalysisResultType } from '../analysis/types';
 import {
   clearDeletedDiaryAnalysisWarning,
@@ -366,8 +367,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      console.log("🟢 STT 응답:", res.data);
-
       const { text } = res.data;
       if (!text) {
         toast.error("변환된 텍스트가 비어 있습니다.");
@@ -511,8 +510,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      console.log("🟢 OCR 응답:", res.data);
-
       const { text } = res.data;
       if (!text) {
         toast.error("인식된 텍스트가 없습니다.");
@@ -534,16 +531,22 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
     }
   };
 
-  const handleAnalysisComplete = async () => {
+  const handleAnalysisComplete = async (result?: any) => {
     const savedDiary = savedDiaryForAnalysis;
+    const normalizedResult = normalizeAnalysisResult(result);
 
     setIsAnalyzing(false);
     setPendingAnalysisPayload(null);
     setSavedDiaryForAnalysis(null);
-    setAnalysisResult(null);
+    setAnalysisResult(normalizedResult);
     setAnalysisAttempt(0);
     if (savedDiary) {
-      await onSave?.(savedDiary);
+      await onSave?.({
+        ...savedDiary,
+        ...(normalizedResult ?? {}),
+        analysisResult: normalizedResult,
+        analysisDisabled: !normalizedResult,
+      });
     }
   };
 
@@ -573,12 +576,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         content: content.trim(),
         keywordIds: getSelectedKeywordIds(),
       };
-
-      console.group("Diary Edit Payload Debug");
-      console.log("date:", editPayload.date);
-      console.log("content:", editPayload.content);
-      console.log("payload:", editPayload);
-      console.groupEnd();
 
       try {
         setPendingAnalysisPayload(null);
@@ -616,22 +613,6 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
             ? emotionMap[emotionType]
             : null,
     };
-
-    console.group("📌 Diary Save Payload Debug");
-    console.log("writeType:", writeType);
-    console.log("date:", formatDateLocal(date));
-    console.log("content:", content.trim());
-    console.log("selectedKeywords:", selectedKeywords);
-    console.log("userKeywords(raw):", userKeywords);
-    console.log("keywordIds:", userKeywords
-      .filter(kw => selectedKeywords.includes(kw.content))
-      .map(kw => kw.id)
-    );
-    console.log("emotionType:", emotionType);
-    console.log("payload:", payload);
-    console.groupEnd();
-    console.log("🔍 selectedKeywords:", selectedKeywords);
-    console.log("🔍 editingDiary.keywords:", editingDiary?.keywords);
 
     try {
       const isDeletedRewrite = disableAnalysis || hasDeletedDiaryAnalysisWarning(payload.date);
@@ -725,8 +706,8 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         onRetry={() => {
           setAnalysisAttempt((prev) => prev + 1);
         }}
-        onComplete={() => {
-          void handleAnalysisComplete();
+        onComplete={(result) => {
+          void handleAnalysisComplete(result);
         }}
       />
     );
