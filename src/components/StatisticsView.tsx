@@ -15,6 +15,12 @@ import { MonthlyAnswers } from './questions/MonthlyAnswers';
 import { NoteHead } from './calendar/NoteHead';
 import { HealthStatsTab } from './statistics/HealthStatsTab';
 import { WatchPairingView } from './settings/WatchPairingView';
+import {
+  formatYearMonth,
+  getMonthWeekDate,
+  getWeekDateList,
+  getWeekSelection,
+} from '../utils/date';
 import { 
   Music, 
   TrendingUp, 
@@ -57,8 +63,7 @@ interface ChallengeCompletionResponse {
 
 interface MusicStatsResponse {
   monthlyCount: number;
-  topGenre: string;
-  mapping: { [emotionLabel: string]: { [genre: string]: number } };
+  emotionGenreMapping: Record<string, Record<string, number>>;
 }
 
 interface DiaryStatsResponse {
@@ -81,63 +86,6 @@ function normalize(dateStr: string) {
   // dateStr이 "2025-11-10" 또는 "2025-11-10T14:00:00" 모두 지원
   const [y, m, d] = dateStr.split("T")[0].split("-");
   return `${y}-${m}-${d}`;
-}
-
-function getSunday(date: Date) {
-  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const day = local.getDay(); // 0 = Sunday
-
-  const sunday = new Date(local);
-  sunday.setDate(local.getDate() - day);
-
-  return sunday; // KST 그대로
-}
-
-function computeCurrentWeek(baseDate: Date) {
-  const year = baseDate.getFullYear();
-  const month = baseDate.getMonth() + 1;
-
-  // baseDate가 포함된 주의 일요일 계산
-  const sunday = getSunday(baseDate);
-
-  // 이번 달 1일
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayWeekday = firstDayOfMonth.getDay();
-
-  // 월 1일이 포함된 주의 일요일
-  const firstWeekSunday = new Date(firstDayOfMonth);
-  firstWeekSunday.setDate(firstDayOfMonth.getDate() - firstDayWeekday);
-
-  // 주차 계산
-  const diff = Math.floor((sunday.getTime() - firstWeekSunday.getTime()) / (1000 * 60 * 60 * 24));
-  const week = Math.floor(diff / 7) + 1;
-
-  return { year, month, week };
-}
-
-function getIsoWeek(date: Date) {
-  const temp = new Date(date.getTime());
-  temp.setHours(0, 0, 0, 0);
-  temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
-  const week1 = new Date(temp.getFullYear(), 0, 4);
-  return (
-    1 +
-    Math.round(
-      ((temp.getTime() - week1.getTime()) / 86400000 -
-        3 +
-        ((week1.getDay() + 6) % 7)) /
-        7
-    )
-  );
-}
-
-function computeOffset(baseDate: Date) {
-  const today = new Date();
-
-  const currentWeek = getIsoWeek(baseDate);
-  const thisWeek = getIsoWeek(today);
-
-  return currentWeek - thisWeek;
 }
 
 // ========== Mapping Constants ==========
@@ -174,6 +122,40 @@ const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSI
   'APATHY': 'APATHY',
 };
 
+const normalizeMusicStatsResponse = (payload: any): MusicStatsResponse | null => {
+  const emotionGenreMapping = payload?.emotionGenreMapping ?? {};
+  const hasRecommendations = Object.values(emotionGenreMapping).some((genres: any) =>
+    Object.values(genres ?? {}).some((count) => Number(count) > 0)
+  );
+
+  if (!hasRecommendations) return null;
+
+  return {
+    monthlyCount: Number(payload?.monthlyCount ?? 0),
+    emotionGenreMapping,
+  };
+};
+
+const getEmotionDisplayLabel = (emotionKey: string): string => {
+  const emotion = emotionMap[emotionKey];
+  return emotion ? emotionNames[emotion] : emotionKey;
+};
+
+const getTopGenre = (emotionGenreMapping: Record<string, Record<string, number>>): string | null => {
+  const genreTotals: Record<string, number> = {};
+
+  Object.values(emotionGenreMapping).forEach((genres) => {
+    Object.entries(genres ?? {}).forEach(([genre, count]) => {
+      const numericCount = Number(count);
+      if (numericCount <= 0) return;
+      genreTotals[genre] = (genreTotals[genre] ?? 0) + numericCount;
+    });
+  });
+
+  const top = Object.entries(genreTotals).sort((a, b) => b[1] - a[1])[0];
+  return top?.[0] ?? null;
+};
+
 const emotionColorClasses = {
   JOY: { text: 'text-amber-600', bg: 'bg-amber-50', bar: '#FFE080' },
   SADNESS: { text: 'text-blue-500', bg: 'bg-amber-50', bar: '#90C8FF' },
@@ -183,21 +165,6 @@ const emotionColorClasses = {
 };
 
 const dayOfWeekNames = ['일', '월', '화', '수', '목', '금', '토'];
-
-function getWeekDateListByBase(baseDate: Date) {
-  const sunday = getSunday(baseDate);
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sunday);
-    d.setDate(sunday.getDate() + i);
-
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-
-    return `${y}-${m}-${dd}`; // CalendarView와 동일
-  });
-}
 
 const INSTRUMENT_MAP = {
   piano: "acoustic_grand_piano-mp3",
@@ -267,7 +234,8 @@ export function StatisticsView() {
   const [weeklyNotes, setWeeklyNotes] = useState<CalendarNoteDto[]>([]);
   const [weeklyChallengeStats, setWeeklyChallengeStats] = useState<ChallengeCompletionResponse | null>(null);
   const base = currentWeek.baseDate;
-  const { year, month, week } = computeCurrentWeek(base);
+  const selectedWeek = getWeekSelection(base);
+  const { year, month, week } = selectedWeek;
   const [userCharacter, setUserCharacter] = useState("PIANO");
   const emotionMapKoToEn: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
     '기쁨': 'JOY',
@@ -300,21 +268,15 @@ export function StatisticsView() {
 
   // ========== Handlers ==========
   const handleWeekChange = (direction: 'prev' | 'next') => {
-    setCurrentWeek(prev => ({
-      baseDate: new Date(
-        prev.baseDate.getTime() + (direction === 'next' ? 7 : -7) * 86400000
-      )
-    }));
+    const boundaryDate = direction === 'next' ? selectedWeek.end : selectedWeek.start;
+    const [boundaryYear, boundaryMonth, boundaryDay] = boundaryDate.split('-').map(Number);
+    const baseDate = new Date(boundaryYear, boundaryMonth - 1, boundaryDay);
+    baseDate.setDate(baseDate.getDate() + (direction === 'next' ? 1 : -1));
+    setCurrentWeek({ baseDate });
   };
 
   const handleWeekDateSelect = (year: number, month: number, week: number) => {
-    const firstDayOfMonth = new Date(year, month - 1, 1);
-    const firstDayWeekday = firstDayOfMonth.getDay();
-    const sunday = getSunday(firstDayOfMonth);
-
-    sunday.setDate(firstDayOfMonth.getDate() - firstDayWeekday + (week - 1) * 7);
-
-    setCurrentWeek({ baseDate: sunday });
+    setCurrentWeek({ baseDate: getMonthWeekDate(year, month, week) });
   };
 
   const handleMonthChange = (direction: 'prev' | 'next') => {
@@ -340,13 +302,12 @@ export function StatisticsView() {
 
   // ========== Fetch Weekly Data ==========
   useEffect(() => {
-    const y = currentWeek.baseDate.getFullYear();
-    const m = currentWeek.baseDate.getMonth() + 1;
-
-    if (currentMonth.year !== y || currentMonth.month !== m) {
-      setCurrentMonth({ year: y, month: m });
-    }
-  }, [currentWeek]);
+    setCurrentMonth((prev) =>
+      prev.year === selectedWeek.year && prev.month === selectedWeek.month
+        ? prev
+        : { year: selectedWeek.year, month: selectedWeek.month },
+    );
+  }, [selectedWeek.year, selectedWeek.month]);
 
   useEffect(() => {
     const loadContentLengths = async () => {
@@ -382,23 +343,31 @@ export function StatisticsView() {
       console.log("📅 fetch with year/month =", year, month);
       setIsLoadingWeekly(true);
       try {
-        // baseDate에서 year, month 추출
         const base = currentWeek.baseDate;
-        const year = base.getFullYear();
-        const month = base.getMonth() + 1;
+        const weekDates = getWeekDateList(base);
+        const weekMonths = Array.from(
+          new Set(weekDates.map((date) => date.slice(0, 7))),
+        ).map((yearMonth) => {
+          const [year, month] = yearMonth.split('-').map(Number);
+          return { year, month };
+        });
 
-        // 월간 데이터 불러오기
-        const res = await api.get(`/api/calendar-notes/${year}/${month}`);
-        const raw = res.data;
-        const monthNotes: CalendarNoteDto[] =
-          Array.isArray(raw) ? raw : raw?.notes ?? [];
-
-        // 이번 주 날짜 7개 (일~토)
-        const weekDates = getWeekDateListByBase(base);
-
-        const weeklyFiltered = monthNotes.filter(n =>
-          weekDates.includes(normalize(n.date))
+        const noteResponses = await Promise.all(
+          weekMonths.map(({ year, month }) => api.get(`/api/calendar-notes/${year}/${month}`)),
         );
+        const monthNotes: CalendarNoteDto[] = noteResponses.flatMap((response) => {
+          const raw = response.data;
+          return Array.isArray(raw) ? raw : raw?.notes ?? [];
+        });
+
+        const weeklyFiltered = monthNotes.filter((note) => {
+          const noteDate = normalize(note.date);
+          return (
+            weekDates.includes(noteDate) &&
+            noteDate >= selectedWeek.start &&
+            noteDate <= selectedWeek.end
+          );
+        });
 
         const normalizedWeeklyNotes = weeklyFiltered.map(n => {
           const normalizedEmotion =
@@ -429,17 +398,11 @@ export function StatisticsView() {
         };
         loadProfile();
 
-        const baseD = currentWeek.baseDate;
-        const sunday = getSunday(baseD);
-
-        const startOfWeek = `${sunday.getFullYear()}-${String(
-          sunday.getMonth() + 1
-        ).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`;
-
         const challenge = await api.get("/api/statistics/challenges/completion-rate", {
           params: {
             period: "weekly",
-            start: startOfWeek,
+            startDate: selectedWeek.start,
+            endDate: selectedWeek.end,
           }
         });
         setWeeklyChallengeStats(challenge.data);
@@ -451,14 +414,17 @@ export function StatisticsView() {
     };
 
     fetchWeeklyData();
-  }, [currentWeek]);
+  }, [currentWeek.baseDate, selectedWeek.start, selectedWeek.end]);
 
   // ========== Fetch Monthly Data ==========
   useEffect(() => {
+    let cancelled = false;
+
     const fetchMonthlyData = async () => {
       setIsLoadingMonthly(true);
+      setMonthlyMusicStats(null);
       try {
-        const monthKey = `${currentMonth.year}-${String(currentMonth.month).padStart(2, "0")}`;
+        const monthKey = formatYearMonth(currentMonth.year, currentMonth.month);
         const [diary, challengeEmotion, music, keywordRank] = await Promise.allSettled([
           api.get("/api/statistics/diary", {
             params: {
@@ -484,12 +450,7 @@ export function StatisticsView() {
               year: currentMonth.year,
               month: currentMonth.month,
             }
-          }).catch(() => api.get("/api/statistics/music", {
-            params: {
-              period: "monthly",
-              month: monthKey,
-            }
-          })),
+          }),
           api.get("/api/statistics/keywords/ranking", {
             params: {
               period: "monthly",
@@ -504,11 +465,29 @@ export function StatisticsView() {
           })),
         ]);
 
+        if (cancelled) return;
+
+        const monthlyDiaryCount =
+          diary.status === "fulfilled"
+            ? diary.value.data?.monthlyCount ?? diary.value.data?.count ?? 0
+            : 0;
+        const hasMonthlyDiary = monthlyDiaryCount > 0;
+
         if (diary.status === "fulfilled") {
-          setMonthlyDiaryStats(diary.value.data);
+          setMonthlyDiaryStats({
+            ...diary.value.data,
+            monthlyCount: monthlyDiaryCount,
+          });
         } else {
           console.error("월간 일기 통계 로딩 실패:", diary.reason);
           setMonthlyDiaryStats(null);
+        }
+
+        if (!hasMonthlyDiary) {
+          setMonthlyChallengePerformance({});
+          setMonthlyMusicStats(null);
+          setMonthlyKeywords([]);
+          return;
         }
 
         if (challengeEmotion.status === "fulfilled") {
@@ -527,12 +506,7 @@ export function StatisticsView() {
         }
 
         if (music.status === "fulfilled") {
-          const musicRaw = music.value.data;
-          const normalizedMusicStats = {
-            monthlyCount: musicRaw.monthlyCount ?? 0,
-            emotionGenreMapping: musicRaw.emotionGenreMapping ?? {}
-          };
-          setMonthlyMusicStats(normalizedMusicStats);
+          setMonthlyMusicStats(normalizeMusicStatsResponse(music.value.data));
         } else {
           console.error("월간 음악 통계 로딩 실패:", music.reason);
           setMonthlyMusicStats(null);
@@ -548,12 +522,18 @@ export function StatisticsView() {
       } catch (err) {
         console.error(err);
       } finally {
-        setIsLoadingMonthly(false);
+        if (!cancelled) {
+          setIsLoadingMonthly(false);
+        }
       }
     };
 
     fetchMonthlyData();
-  }, [currentMonth]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentMonth.year, currentMonth.month]);
 
   // ========== Fetch Total Data ==========
   useEffect(() => {
@@ -671,7 +651,7 @@ export function StatisticsView() {
     }
 
     const sampler = samplerRef.current;
-    const weekDays = getWeekDateListByBase(currentWeek.baseDate);
+    const weekDays = getWeekDateList(currentWeek.baseDate);
     const now = Tone.now();
 
     // 디버깅 스택
@@ -805,10 +785,10 @@ export function StatisticsView() {
                           {[2020, 2021, 2022, 2023, 2024, 2025].map((year) => (
                             <Button
                               key={year}
-                              variant={year === currentWeek.year ? 'default' : 'ghost'}
+                              variant={year === selectedWeek.year ? 'default' : 'ghost'}
                               size="sm"
                               className="h-8"
-                              onClick={() => handleWeekDateSelect(year, currentWeek.month, currentWeek.week)}
+                              onClick={() => handleWeekDateSelect(year, selectedWeek.month, selectedWeek.week)}
                             >
                               {year}
                             </Button>
@@ -824,10 +804,10 @@ export function StatisticsView() {
                           {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                             <Button
                               key={month}
-                              variant={month === currentWeek.month ? 'default' : 'ghost'}
+                              variant={month === selectedWeek.month ? 'default' : 'ghost'}
                               size="sm"
                               className="h-8"
-                              onClick={() => handleWeekDateSelect(currentWeek.year, month, currentWeek.week)}
+                              onClick={() => handleWeekDateSelect(selectedWeek.year, month, selectedWeek.week)}
                             >
                               {month}
                             </Button>
@@ -840,13 +820,13 @@ export function StatisticsView() {
                           주차
                         </p>
                         <div className="grid grid-cols-5 gap-1">
-                          {[1, 2, 3, 4, 5].map((week) => (
+                          {[1, 2, 3, 4, 5, 6].map((week) => (
                             <Button
                               key={week}
-                              variant={week === currentWeek.week ? 'default' : 'ghost'}
+                              variant={week === selectedWeek.week ? 'default' : 'ghost'}
                               size="sm"
                               className="h-8"
-                              onClick={() => handleWeekDateSelect(currentWeek.year, currentWeek.month, week)}
+                              onClick={() => handleWeekDateSelect(selectedWeek.year, selectedWeek.month, week)}
                             >
                               {week}주
                             </Button>
@@ -994,7 +974,7 @@ export function StatisticsView() {
 
                           {/* =====  주간 음표 그리기  ===== */}
                           {(() => {
-                            const dateList = getWeekDateListByBase(currentWeek.baseDate);
+                            const dateList = getWeekDateList(currentWeek.baseDate);
 
                             const sortedNotes = dateList.map((d) =>
                               weeklyNotes.find((n) => normalize(n.date) === d) || null
@@ -1038,7 +1018,7 @@ export function StatisticsView() {
                         {/* ===== 요일 + 감정 텍스트 ===== */}
                         <div className="grid grid-cols-7 gap-0 mt-6">
                           {(() => {
-                            const dateList = getWeekDateListByBase(currentWeek.baseDate);
+                            const dateList = getWeekDateList(currentWeek.baseDate);
 
                             return dateList.map((dateStr, i) => {
                               const noteData = weeklyNotes.find(n => normalize(n.date) === dateStr);
@@ -1217,20 +1197,8 @@ export function StatisticsView() {
                             1) topGenre 계산
                         =============================== */}
                         {(() => {
-                          let topGenre = "-";
-                          let topCount = -1;
-
                           const mappings = monthlyMusicStats.emotionGenreMapping ?? {};
-
-                          // 감정별 → 장르별 → 수치 비교
-                          Object.values(mappings).forEach((genres) => {
-                            Object.entries(genres).forEach(([genre, count]) => {
-                              if (count > topCount) {
-                                topCount = count;
-                                topGenre = genre;
-                              }
-                            });
-                          });
+                          const topGenre = getTopGenre(mappings);
 
                           return (
                             <div className="bg-gradient-to-r from-[#7B8B4F]/10 to-[#7B8B4F]/5 rounded-lg p-4 text-center">
@@ -1238,7 +1206,7 @@ export function StatisticsView() {
                                 가장 많이 추천된 장르
                               </p>
                               <p className="text-xl font-semibold" style={{ color: '#7B8B4F' }}>
-                                {topGenre} 🎷
+                                {topGenre ? `${topGenre} 🎷` : '이번 달 음악 추천 기록이 없어요'}
                               </p>
                             </div>
                           );
@@ -1254,32 +1222,32 @@ export function StatisticsView() {
 
                           {monthlyMusicStats.emotionGenreMapping &&
                             Object.entries(monthlyMusicStats.emotionGenreMapping).length > 0 ? (
-                            Object.entries(monthlyMusicStats.emotionGenreMapping).map(([emotionKo, genres]) => {
-                              const emotion =
-                                emotionKo === '기쁨' ? 'JOY' :
-                                emotionKo === '슬픔' ? 'SADNESS' :
-                                emotionKo === '분노' ? 'ANGER' :
-                                emotionKo === '화남' ? 'ANGER' :
-                                emotionKo === '무기력' ? 'APATHY' :
-                                emotionKo === '예민' ? 'SENSITIVE' : 'APATHY';
+                            Object.entries(monthlyMusicStats.emotionGenreMapping).map(([emotionKey, genres]) => {
+                              const visibleGenres = Object.entries(genres ?? {})
+                                .map(([genre, count]) => [genre, Number(count)] as const)
+                                .filter(([, count]) => count > 0);
 
-                              const totalCount = Object.values(genres).reduce((a, b) => a + b, 0);
+                              if (visibleGenres.length === 0) return null;
+
+                              const emotion = emotionMap[emotionKey] ?? 'APATHY';
+                              const emotionLabel = getEmotionDisplayLabel(emotionKey);
+                              const totalCount = visibleGenres.reduce((sum, [, count]) => sum + count, 0);
                               const EmotionIcon = emotionIcons[emotion];
                               const colorClass = emotionColorClasses[emotion];
 
                               return (
-                                <div key={emotion} className="p-3 border rounded-lg bg-white/60">
+                                <div key={emotionKey} className="p-3 border rounded-lg bg-white/60">
                                   <div className="flex items-center gap-2 mb-2">
                                     {EmotionIcon && (
                                       <EmotionIcon className={`w-4 h-4 ${colorClass.text}`} />
                                     )}
                                     <span className="text-sm font-medium">
-                                      {emotionKo} ({totalCount}곡)
+                                      {emotionLabel} ({totalCount}곡)
                                     </span>
                                   </div>
 
                                   <div className="pl-2 space-y-1">
-                                    {Object.entries(genres).map(([genre, count]) => (
+                                    {visibleGenres.map(([genre, count]) => (
                                       <div key={genre} className="flex items-center justify-between text-sm">
                                         <span>{genre}</span>
                                         <span style={{ color: '#7B8B4F' }}>{count}곡</span>

@@ -15,6 +15,7 @@ import {
   CalendarDays,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import { formatDateToAPI } from '../utils/date';
 
 type ViewMode = 'main' | 'badges' | 'lp-reward' | 'monthly-challenge';
 
@@ -22,9 +23,13 @@ type TodayChallenge = {
   recommended?: boolean;
   completed?: boolean;
   challengeId?: number;
+  date?: string;
+  challengeDate?: string;
+  recommendedDate?: string;
   content?: string;
   emotionType?: string;
   category?: string;
+  createdAt?: string | null;
   completedAt?: string | null;
 };
 
@@ -45,7 +50,7 @@ type BadgeResponseLike = ChallengeBadgeResponse & {
 const CHALLENGE_PROGRESS_STORAGE_KEY = 'challenge-progress';
 
 function getTodayDateKey() {
-  return new Date().toISOString().split('T')[0];
+  return formatDateToAPI(new Date());
 }
 
 function getProgressStorageKey(challengeId: number | string) {
@@ -72,24 +77,42 @@ export function ChallengeView() {
   const [todayChallenge, setTodayChallenge] = useState<TodayChallenge | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isCompleting, setIsCompleting] = useState(false);
   const [musicData, setMusicData] = useState<RewardData>(null);
   const [newBadges, setNewBadges] = useState<ChallengeBadgeResponse[]>([]);
   const [showBadgeToast, setShowBadgeToast] = useState(false);
 
-  const fetchChallengeStatus = async () => {
-    const res = await api.get('/api/challenge/status');
-    return res.data as TodayChallenge;
-  };
+  const normalizeChallengeStatus = (data: any): TodayChallenge | null => {
+    const raw = data?.challenge ?? data?.data ?? data;
+    if (!raw) return null;
 
-  const ensureTodayChallenge = async () => {
-    let statusData = await fetchChallengeStatus();
+    const challengeId = raw.challengeId ?? raw.id;
+    if (!challengeId) return null;
 
-    if (!statusData?.challengeId) {
-      await api.get('/api/challenge/today');
-      statusData = await fetchChallengeStatus();
+    const today = getTodayDateKey();
+    const responseDate = (
+      raw.date ??
+      raw.challengeDate ??
+      raw.recommendedDate ??
+      raw.createdAt ??
+      ''
+    ).slice(0, 10);
+
+    if (responseDate && responseDate !== today) {
+      return null;
     }
 
-    return statusData;
+    return {
+      ...raw,
+      challengeId,
+    };
+  };
+
+  const fetchChallengeStatus = async () => {
+    const res = await api.get('/api/challenge/status', {
+      params: { date: getTodayDateKey() },
+    });
+    return normalizeChallengeStatus(res.data);
   };
 
   const normalizeBadgeList = (data: any) => {
@@ -138,8 +161,9 @@ export function ChallengeView() {
   /** 오늘의 챌린지 불러오기 */
   useEffect(() => {
     const fetchTodayChallenge = async () => {
+      setLoading(true);
       try {
-        const statusData = await ensureTodayChallenge();
+        const statusData = await fetchChallengeStatus();
 
         setTodayChallenge(statusData);
 
@@ -155,7 +179,7 @@ export function ChallengeView() {
           setIsCompleted(false);
         }
       } catch (e) {
-        console.error('❌ 오늘의 챌린지 조회/생성 실패:', e);
+        console.error('❌ 오늘의 챌린지 조회 실패:', e);
         toast.error('오늘의 챌린지를 가져오지 못했어요.');
       } finally {
         setLoading(false);
@@ -176,8 +200,12 @@ export function ChallengeView() {
 
   /** 챌린지 완료 처리 */
   const handleCompleteChallenge = async () => {
+    if (isCompleting || isCompleted) return;
+
+    setIsCompleting(true);
+
     try {
-      const latestStatus = await ensureTodayChallenge();
+      const latestStatus = await fetchChallengeStatus();
 
       if (!latestStatus?.challengeId) {
         toast.error('오늘의 챌린지가 존재하지 않아요.');
@@ -239,8 +267,25 @@ export function ChallengeView() {
 
       setCurrentView('lp-reward');
     } catch (err) {
+      try {
+        const latestStatus = await fetchChallengeStatus();
+
+        if (latestStatus?.completed && latestStatus.challengeId) {
+          setTodayChallenge(latestStatus);
+          setProgress(100);
+          setIsCompleted(true);
+          localStorage.setItem(getProgressStorageKey(latestStatus.challengeId), '100');
+          toast.success('오늘의 챌린지를 완료했어요!');
+          return;
+        }
+      } catch (statusErr) {
+        console.error('챌린지 완료 실패 후 상태 재조회 실패:', statusErr);
+      }
+
       console.error('❌ 챌린지 완료 처리 실패:', err);
       toast.error('챌린지 완료에 실패했어요. 다시 시도해주세요.');
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -352,7 +397,7 @@ export function ChallengeView() {
               )}
 
               <Button
-                disabled={progress < 100 || isCompleted}
+                disabled={progress < 100 || isCompleted || isCompleting}
                 onClick={handleCompleteChallenge}
                 className={`w-full ${
                   isCompleted
@@ -364,6 +409,8 @@ export function ChallengeView() {
               >
                 {isCompleted ? (
                   '이미 완료된 챌린지'
+                ) : isCompleting ? (
+                  '완료 처리 중...'
                 ) : progress === 100 ? (
                   <span className="flex items-center justify-center gap-2">
                     <CheckCircle2 size={16} />

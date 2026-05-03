@@ -21,6 +21,7 @@ export function hasValidAnalysis(data: any) {
 
   return Boolean(
     data.emotionLabel ||
+    data.emotionType ||
     data.emotionReason ||
     data.selectedTrackTitle ||
     data.selectedTrackArtist ||
@@ -43,7 +44,7 @@ export function normalizeAnalysisResult(data: any): AnalysisResultType | null {
   return {
     ...data,
     date: data.date ?? data.analysisDate ?? '',
-    emotion: data.emotion ?? data.emotionLabel ?? '기쁨',
+    emotion: data.emotion ?? data.emotionLabel ?? data.emotionType ?? '기쁨',
     confidence: data.confidence ?? confidenceFromScore ?? 0,
     reason: data.reason ?? data.description ?? data.emotionReason ?? '',
     description: data.description ?? data.reason ?? data.emotionReason ?? '',

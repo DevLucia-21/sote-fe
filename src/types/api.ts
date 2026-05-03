@@ -386,9 +386,8 @@ export interface ChallengeBadgeStatsResponse {
 }
 
 export interface MusicStatsResponse {
-  topGenres: Array<{ genre: string; count: number }>;
-  totalRecommendations: number;
-  period: string;
+  monthlyCount: number;
+  emotionGenreMapping: Record<string, Record<string, number>>;
 }
 
 export interface KeywordRankingResponse {

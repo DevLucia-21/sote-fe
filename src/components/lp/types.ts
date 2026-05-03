@@ -15,4 +15,5 @@ export interface LpRewardResponse {
 // 내부 상태용 타입
 export interface LPMusic extends LpRewardResponse {
   id: string;
+  diaryEmotion?: string | null;
 }

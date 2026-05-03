@@ -51,7 +51,7 @@ export function LPMonthlyView({
         // 🔥 감정 가져오기
         const withEmotion = await Promise.all(
           list.map(async (m: LPMusic) => {
-            const dateStr = m.rewardDate; // YYYY-MM-DD
+            const dateStr = (m.rewardDate || m.recommendedAt || '').slice(0, 10);
 
             try {
               const diaryRes = await api.get(`/api/diaries?date=${dateStr}`);
@@ -95,14 +95,18 @@ export function LPMonthlyView({
   // 날짜별 LP 매핑
   const lpByDate: Record<string, LPMusic> = {};
   musicList.forEach((music) => {
-    const date = new Date(music.rewardDate);
-    if (date.getFullYear() === year && date.getMonth() === month - 1) {
-      lpByDate[date.getDate()] = music;
+    const [rewardYear, rewardMonth, rewardDay] = (music.rewardDate || music.recommendedAt || '')
+      .slice(0, 10)
+      .split('-')
+      .map(Number);
+
+    if (rewardYear === year && rewardMonth === month) {
+      lpByDate[rewardDay] = music;
     }
   });
 
   // 년도 목록 (2020~2025)
-  const years = [2020, 2021, 2022, 2023, 2024, 2025];
+  const years = Array.from({ length: 8 }, (_, index) => 2020 + index);
 
   // 월 목록
   const months = Array.from({ length: 12 }, (_, i) => i + 1);

@@ -119,7 +119,7 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
   const firstDayOfWeek = firstDayOfMonth.getDay();
   const daysInMonth = lastDayOfMonth.getDate();
 
-  const years = [2020, 2021, 2022, 2023, 2024, 2025];
+  const years = Array.from({ length: 8 }, (_, index) => 2020 + index);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
@@ -253,10 +253,7 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
                   style={{
                     backgroundColor: challenge ? '#FFFFFF' : undefined,
                   }}
-                  onClick={() => {
-                    console.log("선택한 ID:", challenge.id);
-                    setSelectedChallengeId(challenge.id);
-                  }}
+                  onClick={challenge ? () => setSelectedChallengeId(challenge.id) : undefined}
                 >
                   {/* 날짜 */}
                   <span className="text-[0.55rem] md:text-xs mb-0.5 md:mb-1 text-muted-foreground">

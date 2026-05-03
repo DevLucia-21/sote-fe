@@ -754,6 +754,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               const isPastDate = cellDate < today;
+              const isTodayDate = cellDate.getTime() === today.getTime();
 
               return (
                 <CalendarCell
@@ -761,6 +762,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
                   day={day}
                   diaryEntry={diaryEntry}
                   isPastDate={isPastDate}
+                  isTodayDate={isTodayDate}
                   dateStr={dayKey}
                   onCellClick={handleCellClick}
                   onRestClick={handleRestClick}

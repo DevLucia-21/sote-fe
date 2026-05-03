@@ -155,7 +155,22 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
         };
         loadProfile();
 
-        const diaryData = diary.id && diary.content ? diary : await fetchDiaryByDate(diary.date);
+        let diaryData = diary;
+        try {
+          const fetchedDiary = await fetchDiaryByDate(diary.date);
+          diaryData = {
+            ...diary,
+            ...fetchedDiary,
+            date: (fetchedDiary.date || fetchedDiary.diaryDate || diary.date || '').split("T")[0],
+            content: fetchedDiary.content ?? diary.content,
+          };
+        } catch (error) {
+          if (!diary.id) {
+            throw error;
+          }
+          console.error("일기 상세 재조회 실패, 기존 데이터로 표시:", error);
+        }
+
         if (!diaryData?.id) {
           throw new Error(`일기 상세를 찾을 수 없습니다: ${diary.date}`);
         }
@@ -169,9 +184,13 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           return;
         }
 
-        const inlineAnalysisData = normalizeAnalysisResult(
-          (diaryData as any).analysisResult ?? diaryData
-        );
+        const inlineAnalysisSource =
+          (diaryData as any).analysisResult ??
+          (diaryData as any).analysis ??
+          null;
+        const inlineAnalysisData = inlineAnalysisSource
+          ? normalizeAnalysisResult(inlineAnalysisSource)
+          : null;
 
         if (inlineAnalysisData) {
           setAnalysisData(inlineAnalysisData);
@@ -186,7 +205,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
             return null;
           }
 
-          return res.data;
+          return res.data?.analysisResult ?? res.data?.analysis ?? res.data?.data ?? res.data;
         };
 
         let raw;

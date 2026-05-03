@@ -15,6 +15,7 @@ interface CalendarCellProps {
   noteSize?: number;
   cellHeight?: number;
   isEasyMode?: boolean;
+  isTodayDate?: boolean;
 }
 
 export function CalendarCell({
@@ -28,6 +29,7 @@ export function CalendarCell({
   noteSize = 35,
   cellHeight = 140,
   isEasyMode = false,
+  isTodayDate = false,
 }: CalendarCellProps) {
   const hasEntry = !!diaryEntry;
 
@@ -61,12 +63,16 @@ export function CalendarCell({
       className={`relative transition-colors ${
         hasEntry || showRest ? 'cursor-pointer hover:bg-[#F0F5E0] dark:hover:bg-[#7B8B4F]/40' : ''
       }`}
-      style={{ height: `${cellHeight}px` }}
+      style={{
+        height: `${cellHeight}px`,
+        boxShadow: isTodayDate ? 'inset 0 0 0 1.5px rgba(123, 139, 79, 0.65)' : undefined,
+        borderRadius: isTodayDate ? '12px' : undefined,
+      }}
       onClick={hasEntry ? handleClick : undefined}
     >
       <span
         className={`absolute top-2 left-1/2 -translate-x-1/2 text-sm z-10 px-1.5 py-0.5 rounded ${
-          hasEntry ? 'bg-white/90' : ''
+          hasEntry || isTodayDate ? 'bg-white/90 dark:bg-card/90' : ''
         }`}
         style={{ color: '#4A3228' }}
       >

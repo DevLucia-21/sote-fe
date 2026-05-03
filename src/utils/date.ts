@@ -53,3 +53,60 @@ export function isPastDate(date: Date | string): boolean {
 export function formatYearMonth(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
+
+export function getStartOfWeek(date: Date): Date {
+  const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  local.setDate(local.getDate() - local.getDay());
+  return local;
+}
+
+export function getWeekOfMonth(date: Date): number {
+  const startOfWeek = getStartOfWeek(date);
+  const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+  const firstWeekStart = getStartOfWeek(firstDayOfMonth);
+  const diffDays = Math.floor(
+    (startOfWeek.getTime() - firstWeekStart.getTime()) / 86400000,
+  );
+
+  return Math.floor(diffDays / 7) + 1;
+}
+
+export function getMonthWeekDate(year: number, month: number, week: number): Date {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+  const firstWeekStart = getStartOfWeek(monthStart);
+  const weekStart = new Date(firstWeekStart);
+  weekStart.setDate(firstWeekStart.getDate() + (week - 1) * 7);
+
+  if (weekStart < monthStart) return monthStart;
+  if (weekStart > monthEnd) return monthEnd;
+  return weekStart;
+}
+
+export function getWeekDateList(date: Date): string[] {
+  const start = getStartOfWeek(date);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const item = new Date(start);
+    item.setDate(start.getDate() + index);
+    return formatDateToAPI(item);
+  });
+}
+
+export function getWeekSelection(date: Date) {
+  const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+  const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  const weekStart = getStartOfWeek(date);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const clippedStart = weekStart < monthStart ? monthStart : weekStart;
+  const clippedEnd = weekEnd > monthEnd ? monthEnd : weekEnd;
+
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    week: getWeekOfMonth(date),
+    start: formatDateToAPI(clippedStart),
+    end: formatDateToAPI(clippedEnd),
+  };
+}
