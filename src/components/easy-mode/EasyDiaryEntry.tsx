@@ -9,6 +9,7 @@ import { SimpleVoiceRecorder } from './SimpleVoiceRecorder';
 import { AnalysisLoading } from '../analysis/AnalysisLoading';
 import { AnalysisResult, hasValidAnalysis, normalizeAnalysisResult } from '../analysis/AnalysisResult';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
+import { formatDateToAPI } from '../../utils/date';
 
 type DiaryType = 'text' | 'voice';
 
@@ -22,7 +23,11 @@ export function EasyDiaryEntry() {
   const [lengthWarning, setLengthWarning] = useState(false);
   const [sttLimitWarning, setSttLimitWarning] = useState(false);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = formatDateToAPI(new Date());
+
+  useEffect(() => {
+    void api.get('/api/ai/wake').catch(() => {});
+  }, []);
 
   // useEffect(() => { 
   //   const checkTodayDiary = async () => {

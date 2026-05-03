@@ -51,6 +51,10 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
   const [pendingAnalysisPayload, setPendingAnalysisPayload] = useState(null);
   const [editingDiary, setEditingDiary] = useState<any | null>(null);
 
+  useEffect(() => {
+    void api.get('/api/ai/wake').catch(() => {});
+  }, []);
+
   const getErrorStatus = (error: unknown) => {
     if (
       typeof error === 'object' &&

@@ -131,6 +131,10 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    void api.get('/api/ai/wake').catch(() => {});
+  }, []);
+
   const MINIMUM_LENGTH = 10;
   const initialContent = editingDiary?.content?.trim() ?? '';
   const hasEditedContent = content.trim() !== initialContent;
