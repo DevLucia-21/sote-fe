@@ -6,7 +6,6 @@
 ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)
 ![Axios](https://img.shields.io/badge/Axios-5A29E4?style=flat-square&logo=axios&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=flat-square&logo=firebase&logoColor=black)
 
@@ -309,7 +308,6 @@ LP 보상 저장
 | Challenge UX      | 챌린지 추천, 상태 조회, 완료 처리 화면 흐름 구성                          |
 | Easy Mode         | 쉬운 모드 화면 흐름과 일반 모드와의 분기 구조 구성                          |
 | Notification      | Firebase Cloud Messaging 기반 알림 설정 흐름 구성                |
-| Backend / AI      | Spring Boot 백엔드와 FastAPI AI 서버 개발 일부 담당                |
 | Refactoring       | 프로젝트 종료 후 로컬 실행 오류 수정 및 기능 흐름 안정화                      |
 | Portfolio Cleanup | 공개 리포지토리 전환을 위한 환경 변수, README, 브랜치 정리                  |
 
@@ -320,7 +318,7 @@ LP 보상 저장
 | Category              | Stack                    |
 | --------------------- | ------------------------ |
 | Frontend              | React, TypeScript, Vite  |
-| Styling               | Tailwind CSS             |
+| Styling               | CSS, Tailwind-style utility classes |
 | UI Library            | Radix UI, lucide-react   |
 | API Client            | Axios                    |
 | State Management      | React Hooks              |
@@ -493,7 +491,9 @@ VITE_FIREBASE_VAPID_KEY=
 git clone https://github.com/DevLucia-21/sote-fe.git
 cd sote-fe
 npm install
-cp .env.example .env
+```
+.env.example 파일을 복사해 .env 파일을 생성한 뒤, 필요한 환경 변수를 입력합니다.
+```bash
 npm run dev
 ```
 
@@ -511,9 +511,9 @@ npm run build
 
 | Repository | Description              |
 | ---------- | ------------------------ |
-| `sote-fe`  | S:ote 프론트엔드 리포지토리        |
-| `sote-be`  | Spring Boot 기반 백엔드 리포지토리 |
-| `sote-ai`  | FastAPI 기반 AI 서버 리포지토리   |
+| [`sote-fe`](https://github.com/DevLucia-21/sote-fe)  | S:ote 프론트엔드 리포지토리        |
+| [`sote-be`](https://github.com/DevLucia-21/sote-be)  | Spring Boot 기반 백엔드 리포지토리 |
+| [`sote-ai`](https://github.com/DevLucia-21/sote-ai)  | FastAPI 기반 AI 서버 리포지토리   |
 
 본 저장소는 Fluxion 팀 프로젝트의 프론트엔드 코드를 개인 포트폴리오용으로 정리한 리포지토리입니다.
 
