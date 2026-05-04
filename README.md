@@ -71,6 +71,27 @@ S:ote는 단순히 일기를 저장하는 데 그치지 않고,
 
 ---
 
+## Service Preview
+
+S:ote는 일기 작성부터 감정 분석, 음악·챌린지 추천, 감정 회고까지 이어지는 흐름을 하나의 웹앱 경험으로 구성했습니다.
+
+| Diary Writing | Emotion Analysis |
+| --- | --- |
+| 사용자가 텍스트, 음성, 손글씨 기반으로 일기를 작성하는 화면입니다. | AI 감정 분석 결과와 추천 음악, 추천 챌린지를 확인하는 화면입니다. |
+| ![Diary Writing](./docs/images/preview-diary-web.png) | ![Emotion Analysis](./docs/images/preview-analysis-web.png) |
+
+| Emotion Calendar & Music Sheet | Challenge |
+| --- | --- |
+| 월별 감정 기록을 캘린더와 악보 형태로 시각화한 화면입니다. | 감정 분석 결과를 바탕으로 추천된 챌린지를 확인하고 수행하는 화면입니다. |
+| ![Emotion Calendar & Music Sheet](./docs/images/preview-calendar-score-web.png) | ![Challenge](./docs/images/preview-challenge-web.png) |
+
+| Statistics | Mobile Responsive View |
+| --- | --- |
+| 감정 분포, 키워드, 챌린지 수행 기록을 확인하는 통계 화면입니다. | 모바일 환경에서 감정 분석 결과 화면이 반응형으로 표시되는 예시입니다. |
+| ![Statistics](./docs/images/preview-statistics-web.png) | ![Mobile Responsive View](./docs/images/preview-mobile-analysis.png) |
+
+---
+
 ## Core Features
 
 ### 1. Authentication
