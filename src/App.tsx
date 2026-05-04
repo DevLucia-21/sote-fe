@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { SplashScreen } from './components/SplashScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { MainApp } from './components/MainApp';
-import { getMyInfoAPI } from './services/api';
+import { refreshAuthAPI } from './services/api';
 import { AuthStorage } from './utils/auth';
 
 export default function App() {
@@ -22,25 +22,24 @@ export default function App() {
     const initializeApp = async () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const accessToken = AuthStorage.getAccessToken();
       const refreshToken = AuthStorage.getRefreshToken();
 
-      if (!accessToken && !refreshToken) {
+      if (!refreshToken) {
         if (!isMounted) return;
+        clearAuthData();
         setIsAuthenticated(false);
         setCurrentScreen('auth');
         return;
       }
 
       try {
-        await getMyInfoAPI();
+        const tokens = await refreshAuthAPI(refreshToken);
+        AuthStorage.setTokens(tokens.accessToken, tokens.refreshToken);
 
         if (!isMounted) return;
         setIsAuthenticated(true);
         setCurrentScreen('main');
       } catch (error) {
-        console.error('Failed to restore session:', error);
-
         if (!isMounted) return;
         clearAuthData();
         setIsAuthenticated(false);

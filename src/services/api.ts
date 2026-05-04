@@ -170,6 +170,14 @@ export const loginAPI = async (payload: API.LoginRequest) => {
 };
 
 // 유저 정보 API 예시
+export const refreshAuthAPI = async (refreshToken: string) => {
+  const res = await axios.post<API.TokenResponse>(
+    `${BASE_URL}/api/auth/refresh`,
+    { refreshToken }
+  );
+  return res.data;
+};
+
 export const getMyInfoAPI = async () => {
   const res = await apiClient.get("/api/user/me");
   return res.data;
