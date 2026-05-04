@@ -77,6 +77,21 @@ interface ChallengeCompletionResponse {
   completionRate: number;
 }
 
+interface ChallengeHistoryItem {
+  id?: number;
+  challengeId?: number;
+  date?: string;
+  challengeDate?: string;
+  recommendedDate?: string;
+  createdAt?: string;
+  completedAt?: string;
+  emotionType?: EmotionType | string;
+  emotion?: EmotionType | string;
+  emotionLabel?: EmotionType | string;
+  completed?: boolean;
+  status?: string;
+}
+
 interface MusicStatsResponse {
   monthlyCount: number;
   emotionGenreMapping: Record<string, Record<string, number>>;
@@ -215,6 +230,68 @@ const canShowWeeklyNote = (note?: CalendarNoteDto | null) => {
     note.emotion &&
     Number.isFinite(Number(note.score))
   );
+};
+
+const normalizeChallengeHistoryList = (payload: any): ChallengeHistoryItem[] => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.challenges)) return payload.challenges;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+};
+
+const getChallengeCreatedDate = (challenge: ChallengeHistoryItem) => {
+  const rawDate =
+    challenge.date ??
+    challenge.challengeDate ??
+    challenge.recommendedDate ??
+    challenge.createdAt ??
+    '';
+
+  return rawDate ? rawDate.split('T')[0] : '';
+};
+
+const isChallengeCompleted = (challenge: ChallengeHistoryItem) => {
+  return (
+    challenge.completed === true ||
+    Boolean(challenge.completedAt) ||
+    String(challenge.status ?? '').toUpperCase() === 'COMPLETED'
+  );
+};
+
+const fetchMonthlyChallengeHistory = async (year: number, month: number) => {
+  const res = await api.get('/api/challenge/history/monthly', {
+    params: { year, month },
+  });
+
+  return normalizeChallengeHistoryList(res.data);
+};
+
+const buildChallengeCompletionStats = (challenges: ChallengeHistoryItem[]): ChallengeCompletionResponse => {
+  const totalChallenges = challenges.length;
+  const completedChallenges = challenges.filter(isChallengeCompleted).length;
+
+  return {
+    totalChallenges,
+    completedChallenges,
+    completionRate: totalChallenges > 0 ? completedChallenges / totalChallenges : 0,
+  };
+};
+
+const buildChallengeEmotionPerformance = (challenges: ChallengeHistoryItem[]) => {
+  return challenges.reduce<Record<string, { completed: number; total: number }>>((acc, challenge) => {
+    const emotion = normalizeEmotion(challenge);
+    if (!emotion) return acc;
+
+    acc[emotion] = acc[emotion] ?? { completed: 0, total: 0 };
+    acc[emotion].total += 1;
+
+    if (isChallengeCompleted(challenge)) {
+      acc[emotion].completed += 1;
+    }
+
+    return acc;
+  }, {});
 };
 
 const normalizeMusicStatsResponse = (payload: any): MusicStatsResponse | null => {
@@ -512,14 +589,28 @@ export function StatisticsView() {
         };
         loadProfile();
 
-        const challenge = await api.get("/api/statistics/challenges/completion-rate", {
-          params: {
-            period: "weekly",
-            startDate: selectedWeek.start,
-            endDate: selectedWeek.end,
-          }
-        });
-        setWeeklyChallengeStats(challenge.data);
+        try {
+          const challengeHistory = await Promise.all(
+            weekMonths.map(({ year, month }) => fetchMonthlyChallengeHistory(year, month)),
+          );
+          const weeklyChallenges = challengeHistory
+            .flat()
+            .filter((challenge) => {
+              const date = getChallengeCreatedDate(challenge);
+              return date >= selectedWeek.start && date <= selectedWeek.end;
+            });
+
+          setWeeklyChallengeStats(buildChallengeCompletionStats(weeklyChallenges));
+        } catch {
+          const challenge = await api.get("/api/statistics/challenges/completion-rate", {
+            params: {
+              period: "weekly",
+              startDate: selectedWeek.start,
+              endDate: selectedWeek.end,
+            }
+          });
+          setWeeklyChallengeStats(challenge.data);
+        }
       } catch (error) {
         console.error("주간 데이터 로딩 실패:", error);
       } finally {
@@ -539,7 +630,7 @@ export function StatisticsView() {
       setMonthlyMusicStats(null);
       try {
         const monthKey = formatYearMonth(currentMonth.year, currentMonth.month);
-        const [diary, challengeEmotion, music, keywordRank] = await Promise.allSettled([
+        const [diary, challengeHistory, challengeEmotion, music, keywordRank] = await Promise.allSettled([
           api.get("/api/statistics/diary", {
             params: {
               period: "monthly",
@@ -552,6 +643,7 @@ export function StatisticsView() {
               month: monthKey,
             }
           })),
+          fetchMonthlyChallengeHistory(currentMonth.year, currentMonth.month),
           api.get("/api/statistics/challenges/emotion-performance", {
             params: {
               period: "monthly",
@@ -585,7 +677,6 @@ export function StatisticsView() {
           diary.status === "fulfilled"
             ? diary.value.data?.monthlyCount ?? diary.value.data?.count ?? 0
             : 0;
-        const hasMonthlyDiary = monthlyDiaryCount > 0;
 
         if (diary.status === "fulfilled") {
           setMonthlyDiaryStats({
@@ -597,25 +688,23 @@ export function StatisticsView() {
           setMonthlyDiaryStats(null);
         }
 
-        if (!hasMonthlyDiary) {
-          setMonthlyChallengePerformance({});
-          setMonthlyMusicStats(null);
-          setMonthlyKeywords([]);
-          return;
-        }
-
-        if (challengeEmotion.status === "fulfilled") {
+        if (challengeHistory.status === "fulfilled") {
+          setMonthlyChallengePerformance(buildChallengeEmotionPerformance(challengeHistory.value));
+        } else if (challengeEmotion.status === "fulfilled") {
           const ce = challengeEmotion.value.data;
           const mergedPerformance: Record<string, { completed: number; total: number }> = {};
-          Object.keys(ce.emotionCounts ?? {}).forEach(emotion => {
+          const completedCounts = ce.emotionCounts ?? ce.completedCounts ?? ce.performanceByEmotion ?? {};
+          const totalCounts = ce.totalCounts ?? {};
+
+          Object.keys({ ...completedCounts, ...totalCounts }).forEach(emotion => {
             mergedPerformance[emotion] = {
-              completed: ce.emotionCounts[emotion] ?? 0,
-              total: ce.totalCounts?.[emotion] ?? 0
+              completed: completedCounts[emotion] ?? 0,
+              total: totalCounts[emotion] ?? completedCounts[emotion] ?? 0
             };
           });
           setMonthlyChallengePerformance(mergedPerformance);
         } else {
-          console.error("월간 챌린지 감정별 수행 현황 로딩 실패:", challengeEmotion.reason);
+          console.error("월간 챌린지 감정별 수행 현황 로딩 실패:", challengeHistory.reason);
           setMonthlyChallengePerformance({});
         }
 
@@ -1395,53 +1484,60 @@ export function StatisticsView() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {monthlyKeywords.map((keyword, index) => {
-                          const maxCount = monthlyKeywords[0]?.count || 1;
-                          const percentage = (keyword.count / maxCount) * 70;
+                        {(() => {
+                          const maxCount = Math.max(
+                            ...monthlyKeywords.map((keyword) => Number(keyword.count) || 0),
+                            1,
+                          );
 
-                          return (
-                            <div key={index} className="space-y-1">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-2">
+                          return monthlyKeywords.map((keyword, index) => {
+                            const count = Number(keyword.count) || 0;
+                            const percentage = Math.min(100, Math.max(0, (count / maxCount) * 100));
+
+                            return (
+                              <div key={index} className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <span
+                                      className="text-xs font-medium"
+                                      style={{
+                                        color: 'var(--primary)',
+                                        minWidth: '20px',
+                                      }}
+                                    >
+                                      {index + 1}
+                                    </span>
+
+                                    <span className="text-sm">{keyword.keyword}</span>
+                                  </div>
+
                                   <span
-                                    className="text-xs font-medium"
-                                    style={{
-                                      color: 'var(--primary)',
-                                      minWidth: '20px',
-                                    }}
+                                    className="text-sm font-medium"
+                                    style={{ color: 'var(--primary)' }}
                                   >
-                                    {index + 1}
+                                    {count}회
                                   </span>
-
-                                  <span className="text-sm">{keyword.keyword}</span>
                                 </div>
 
-                                <span
-                                  className="text-sm font-medium"
-                                  style={{ color: 'var(--primary)' }}
-                                >
-                                  {keyword.count}회
-                                </span>
-                              </div>
-
-                              <div
-                                className="h-2 rounded-full overflow-hidden"
-                                style={{
-                                  backgroundColor: "#E8EAD9",  
-                                }}
-                              >
                                 <div
+                                  className="h-2 rounded-full overflow-hidden"
                                   style={{
-                                    width: `${percentage}%`,
-                                    height: "100%",
-                                    backgroundColor: "#7B8B4F",
-                                    transition: "width 0.3s ease",
+                                    backgroundColor: "#E8EAD9",  
                                   }}
-                                />
+                                >
+                                  <div
+                                    style={{
+                                      width: `${percentage}%`,
+                                      height: "100%",
+                                      backgroundColor: "#7B8B4F",
+                                      transition: "width 0.3s ease",
+                                    }}
+                                  />
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          });
+                        })()}
                       </div>
                     )}
                   </CardContent>
