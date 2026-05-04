@@ -96,8 +96,12 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     setCurrentDate(new Date(year, month - 1, 15));
   };
 
-  // 년도 목록 (2020~2025)
-  const years = [2020, 2021, 2022, 2023, 2024, 2025];
+  // 년도 목록 (2020~현재 연도+1)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(
+    { length: currentYear - 2020 + 2 },
+    (_, i) => 2020 + i
+  );
   
   // 월 목록
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -147,7 +151,55 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
     "SENSITIVE": "SENSITIVE",
   };
 
+  const getAnalysisSource = (raw: any) => {
+    return raw?.analysisResult ?? raw?.analysis ?? raw?.data ?? raw;
+  };
+
+  const normalizeEmotion = (raw: any) => {
+    const source = getAnalysisSource(raw);
+
+    return (
+      emotionMap[raw?.emotion] ||
+      emotionMap[raw?.emotionLabel] ||
+      emotionMap[raw?.emotionType] ||
+      emotionMap[source?.emotion] ||
+      emotionMap[source?.emotionLabel] ||
+      emotionMap[source?.emotionType] ||
+      raw?.emotion ||
+      raw?.emotionLabel ||
+      raw?.emotionType ||
+      source?.emotion ||
+      source?.emotionLabel ||
+      source?.emotionType ||
+      undefined
+    );
+  };
+
+  const normalizeScore = (raw: any): number | undefined => {
+    const source = getAnalysisSource(raw);
+    const value =
+      raw?.score ??
+      raw?.emotionScore ??
+      raw?.analysisScore ??
+      raw?.confidence ??
+      source?.score ??
+      source?.emotionScore ??
+      source?.analysisScore ??
+      source?.confidence;
+
+    const num = Number(value);
+
+    if (!Number.isFinite(num)) return undefined;
+
+    if (num >= 0 && num <= 1) return num * 5;
+    if (num > 5 && num <= 100) return num / 20;
+
+    return num;
+  };
+
   const hasDiaryAnalysisFields = (diary: any) => {
+    const source = getAnalysisSource(diary);
+
     return Boolean(
       diary?.emotionLabel ||
       diary?.emotionType ||
@@ -161,23 +213,42 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
       diary?.description ||
       diary?.music?.title ||
       diary?.music?.artist ||
-      diary?.analysisStatus === 'COMPLETED'
+      diary?.analysisStatus === 'COMPLETED' ||
+      source?.emotionLabel ||
+      source?.emotionType ||
+      source?.emotion ||
+      source?.score ||
+      source?.emotionScore ||
+      source?.analysisScore ||
+      source?.confidence ||
+      source?.emotionReason ||
+      source?.selectedTrackTitle ||
+      source?.selectedTrackArtist ||
+      source?.reason ||
+      source?.description ||
+      source?.music?.title ||
+      source?.music?.artist ||
+      source?.analysisStatus === 'COMPLETED'
     );
   };
 
   const normalizeDiary = (diary: any, fallbackDate?: string) => {
     const date = diary.date || diary.diaryDate || fallbackDate || '';
     const normalizedDate = date.split("T")[0];
+    const emotion = normalizeEmotion(diary);
+    const score = normalizeScore(diary);
     const analysisDisabled =
       hasRewrittenDiaryStatus(normalizedDate) ||
-      diary.analysisDisabled ||
+      diary.analysisDisabled === true ||
       diary.analysisStatus === 'FAILED' ||
-      !hasDiaryAnalysisFields(diary);
+      diary.analysisStatus === 'UNAVAILABLE';
 
     return {
       ...diary,
       date: normalizedDate,
-      emotion: diary.emotion || emotionMap[diary.emotionLabel] || emotionMap[diary.emotionType] || "APATHY",
+      emotion,
+      score,
+      note: emotion && Number.isFinite(Number(score)) ? getNote(emotion, score) : diary.note,
       contentLength: diary.contentLength || diary.content?.length || 0,
       analysisDisabled,
     };
@@ -382,25 +453,23 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
         const all = [...prevRes.data, ...currentRes.data, ...nextRes.data];
 
-        // 감정 변환 맵
-        const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
-          '기쁨': 'JOY',
-          '슬픔': 'SADNESS',
-          '분노': 'ANGER',
-          "화남": "ANGER",
-          '무기력': 'APATHY',
-          '예민': 'SENSITIVE'
-        };
-
         // 1️⃣ calendar-notes 데이터 기반 기본 map 구성
         const map: Record<string, any> = {};
         all.forEach((n) => {
           const dateStr = n.date.split("T")[0];
+          const emotion = normalizeEmotion(n);
+          const score = normalizeScore(n);
           map[dateStr] = {
             ...n,
-            emotion: emotionMap[n.emotionLabel] || 'APATHY',
+            emotion,
+            score,
+            note: emotion && Number.isFinite(Number(score)) ? getNote(emotion, score) : n.note,
             contentLength: 0,   // 일단 0 (추후 상세 조회에서 채움)
-            analysisDisabled: hasRewrittenDiaryStatus(dateStr),
+            analysisDisabled:
+              hasRewrittenDiaryStatus(dateStr) ||
+              n.analysisDisabled === true ||
+              n.analysisStatus === 'FAILED' ||
+              n.analysisStatus === 'UNAVAILABLE',
           };
         });
 
@@ -410,15 +479,24 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           const dateStr = normalizedDiary.date;
 
           if (!dateStr) return;
-          const hasCalendarNoteAnalysis = hasDiaryAnalysisFields(map[dateStr]);
+          const previous = map[dateStr];
+          const emotion = normalizedDiary.emotion ?? previous?.emotion;
+          const score = normalizedDiary.score ?? previous?.score;
+          const note = emotion && Number.isFinite(Number(score))
+            ? getNote(emotion, Number(score))
+            : normalizedDiary.note ?? previous?.note;
 
           map[dateStr] = {
-            ...map[dateStr],
+            ...previous,
             ...normalizedDiary,
+            emotion,
+            score,
+            note,
             contentLength: normalizedDiary.content?.length ?? normalizedDiary.contentLength ?? 0,
             analysisDisabled:
               hasRewrittenDiaryStatus(dateStr) ||
-              (!hasCalendarNoteAnalysis && normalizedDiary.analysisDisabled),
+              normalizedDiary.analysisDisabled ||
+              previous?.analysisDisabled,
           };
         });
 
@@ -438,7 +516,7 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
           )
         );
 
-        // 4️⃣ 상세 API의 contentLength 주입
+        // 4️⃣ 상세 API의 contentLength 및 분석 필드 보강
         diaryResults.forEach((res) => {
           if (!res || !res.data) return;
 
@@ -448,11 +526,26 @@ export function CalendarView({ onNavigateToSettings }: CalendarViewProps) {
 
           if (!dateStr) return;
 
-          if (!map[dateStr]) {
-            map[dateStr] = {}; // 없을 경우 생성
-          }
+          const previous = map[dateStr] ?? {};
+          const normalizedDiary = normalizeDiary(diary, dateStr);
+          const emotion = normalizedDiary.emotion ?? previous.emotion;
+          const score = normalizedDiary.score ?? previous.score;
+          const note = emotion && Number.isFinite(Number(score))
+            ? getNote(emotion, Number(score))
+            : normalizedDiary.note ?? previous.note;
 
-          map[dateStr].contentLength = length;
+          map[dateStr] = {
+            ...previous,
+            ...normalizedDiary,
+            emotion,
+            score,
+            note,
+            contentLength: length || normalizedDiary.contentLength || previous.contentLength || 0,
+            analysisDisabled:
+              hasRewrittenDiaryStatus(dateStr) ||
+              normalizedDiary.analysisDisabled ||
+              previous.analysisDisabled,
+          };
         });
 
         // 5️⃣ 최종 map 반영

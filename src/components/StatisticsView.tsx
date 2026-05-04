@@ -13,6 +13,9 @@ import {
 } from './ui/dropdown-menu';
 import { MonthlyAnswers } from './questions/MonthlyAnswers';
 import { NoteHead } from './calendar/NoteHead';
+import { NaturalSignImage } from './calendar/NaturalSignImage';
+import { getNote } from './calendar/noteMapping';
+import { EmotionType, NoteType } from './calendar/types';
 import { HealthStatsTab } from './statistics/HealthStatsTab';
 import { WatchPairingView } from './settings/WatchPairingView';
 import {
@@ -21,6 +24,7 @@ import {
   getWeekDateList,
   getWeekSelection,
 } from '../utils/date';
+import { hasRewrittenDiaryStatus } from '../utils/rewrittenDiaryStatus';
 import { 
   Music, 
   TrendingUp, 
@@ -50,9 +54,21 @@ import {
 
 interface CalendarNoteDto {
   date: string;
-  note: string;
-  emotionLabel: 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE';
-  score: number;
+  note?: NoteType;
+  emotion?: EmotionType;
+  emotionLabel?: EmotionType | string;
+  emotionType?: EmotionType | string;
+  score?: number;
+  emotionScore?: number;
+  analysisScore?: number;
+  confidence?: number;
+  content?: string;
+  contentLength?: number;
+  analysisDisabled?: boolean;
+  analysisStatus?: string;
+  analysisResult?: any;
+  analysis?: any;
+  data?: any;
 }
 
 interface ChallengeCompletionResponse {
@@ -120,6 +136,85 @@ const emotionMap: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSI
   'ANGER': 'ANGER',
   'SENSITIVE': 'SENSITIVE',
   'APATHY': 'APATHY',
+};
+
+const getAnalysisSource = (raw: any) => {
+  return raw?.analysisResult ?? raw?.analysis ?? raw?.data ?? raw;
+};
+
+const normalizeEmotion = (raw: any): EmotionType | undefined => {
+  const source = getAnalysisSource(raw);
+
+  return (
+    emotionMap[raw?.emotion] ||
+    emotionMap[raw?.emotionLabel] ||
+    emotionMap[raw?.emotionType] ||
+    emotionMap[source?.emotion] ||
+    emotionMap[source?.emotionLabel] ||
+    emotionMap[source?.emotionType] ||
+    raw?.emotion ||
+    raw?.emotionLabel ||
+    raw?.emotionType ||
+    source?.emotion ||
+    source?.emotionLabel ||
+    source?.emotionType ||
+    undefined
+  );
+};
+
+const normalizeScore = (raw: any): number | undefined => {
+  const source = getAnalysisSource(raw);
+  const value =
+    raw?.score ??
+    raw?.emotionScore ??
+    raw?.analysisScore ??
+    raw?.confidence ??
+    source?.score ??
+    source?.emotionScore ??
+    source?.analysisScore ??
+    source?.confidence;
+
+  const num = Number(value);
+
+  if (!Number.isFinite(num)) return undefined;
+
+  if (num >= 0 && num <= 1) return num * 5;
+  if (num > 5 && num <= 100) return num / 20;
+
+  return num;
+};
+
+const normalizeWeeklyNote = (raw: any, fallbackDate?: string): CalendarNoteDto => {
+  const date = (raw?.date || raw?.diaryDate || fallbackDate || '').split("T")[0];
+  const emotion = normalizeEmotion(raw);
+  const score = normalizeScore(raw);
+  const note = emotion && Number.isFinite(Number(score))
+    ? getNote(emotion, Number(score))
+    : raw?.note;
+
+  return {
+    ...raw,
+    date,
+    emotion,
+    emotionLabel: emotion,
+    score,
+    note,
+    contentLength: raw?.contentLength ?? raw?.content?.length ?? 0,
+    analysisDisabled:
+      hasRewrittenDiaryStatus(date) ||
+      raw?.analysisDisabled === true ||
+      raw?.analysisStatus === 'FAILED' ||
+      raw?.analysisStatus === 'UNAVAILABLE',
+  };
+};
+
+const canShowWeeklyNote = (note?: CalendarNoteDto | null) => {
+  return Boolean(
+    note &&
+    !note.analysisDisabled &&
+    note.emotion &&
+    Number.isFinite(Number(note.score))
+  );
 };
 
 const normalizeMusicStatsResponse = (payload: any): MusicStatsResponse | null => {
@@ -237,14 +332,6 @@ export function StatisticsView() {
   const selectedWeek = getWeekSelection(base);
   const { year, month, week } = selectedWeek;
   const [userCharacter, setUserCharacter] = useState("PIANO");
-  const emotionMapKoToEn: Record<string, 'JOY' | 'SADNESS' | 'ANGER' | 'APATHY' | 'SENSITIVE'> = {
-    '기쁨': 'JOY',
-    '슬픔': 'SADNESS',
-    '분노': 'ANGER',
-    '화남': 'ANGER',
-    '무기력': 'APATHY',
-    '예민': 'SENSITIVE',
-  };
   const [weeklyContentLengths, setWeeklyContentLengths] = useState<Record<string, number>>({});
 
   // 월간
@@ -352,9 +439,14 @@ export function StatisticsView() {
           return { year, month };
         });
 
-        const noteResponses = await Promise.all(
-          weekMonths.map(({ year, month }) => api.get(`/api/calendar-notes/${year}/${month}`)),
-        );
+        const [noteResponses, diariesRes] = await Promise.all([
+          Promise.all(
+            weekMonths.map(({ year, month }) => api.get(`/api/calendar-notes/${year}/${month}`)),
+          ),
+          api.get('/api/diaries', {
+            params: { from: selectedWeek.start, to: selectedWeek.end },
+          }).catch(() => ({ data: [] })),
+        ]);
         const monthNotes: CalendarNoteDto[] = noteResponses.flatMap((response) => {
           const raw = response.data;
           return Array.isArray(raw) ? raw : raw?.notes ?? [];
@@ -369,19 +461,45 @@ export function StatisticsView() {
           );
         });
 
-        const normalizedWeeklyNotes = weeklyFiltered.map(n => {
-          const normalizedEmotion =
-            emotionMapKoToEn[n.emotionLabel] || 'APATHY';
+        const noteMap: Record<string, CalendarNoteDto> = {};
+        weeklyFiltered.forEach((note) => {
+          const dateStr = normalize(note.date);
+          noteMap[dateStr] = normalizeWeeklyNote(note, dateStr);
+        });
 
-          return {
-            ...n,
-            emotion: normalizedEmotion,
-            emotionLabel: normalizedEmotion,
-            contentLength: n.contentLength || 0,
+        const diaries = Array.isArray(diariesRes.data) ? diariesRes.data : [];
+        diaries.forEach((diary: any) => {
+          const dateStr = normalize(diary.date || diary.diaryDate || '');
+          if (!weekDates.includes(dateStr)) return;
+
+          const previous = noteMap[dateStr];
+          const normalizedDiary = normalizeWeeklyNote(diary, dateStr);
+          const emotion = normalizedDiary.emotion ?? previous?.emotion;
+          const score = normalizedDiary.score ?? previous?.score;
+          const note = emotion && Number.isFinite(Number(score))
+            ? getNote(emotion, Number(score))
+            : normalizedDiary.note ?? previous?.note;
+
+          noteMap[dateStr] = {
+            ...previous,
+            ...normalizedDiary,
+            emotion,
+            emotionLabel: emotion,
+            score,
+            note,
+            contentLength:
+              normalizedDiary.content?.length ??
+              normalizedDiary.contentLength ??
+              previous?.contentLength ??
+              0,
+            analysisDisabled:
+              hasRewrittenDiaryStatus(dateStr) ||
+              normalizedDiary.analysisDisabled ||
+              previous?.analysisDisabled,
           };
         });
 
-        setWeeklyNotes(normalizedWeeklyNotes);
+        setWeeklyNotes(weekDates.map((dateStr) => noteMap[dateStr]).filter(Boolean));
 
         const fetchUserProfile = async () => {
           const res = await api.get("/api/users/profile");
@@ -665,19 +783,20 @@ export function StatisticsView() {
         dateStr,
         noteObj,
         noteValue: noteObj?.note,
-        mapped: noteObj ? NOTE_MAP[noteObj.note] : null,
+        mapped: noteObj?.note ? NOTE_MAP[noteObj.note] : null,
         delay: now + i * 0.6
       });
 
-      if (!noteObj) {
-        console.warn(`⚠️ ${dateStr}: 해당 날짜에 noteObj 없음`);
+      if (!canShowWeeklyNote(noteObj)) {
+        console.warn(`⚠️ ${dateStr}: 재생 가능한 분석 음표 없음`);
         return;
       }
 
-      const midiNote = NOTE_MAP[noteObj.note];
+      const note = noteObj.note ?? getNote(noteObj.emotion, Number(noteObj.score));
+      const midiNote = NOTE_MAP[note];
 
       if (!midiNote) {
-        console.error(`❌ NOTE_MAP에서 매핑 실패: note="${noteObj.note}"`);
+        console.error(`❌ NOTE_MAP에서 매핑 실패: note="${note}"`);
         return;
       }
 
@@ -984,6 +1103,10 @@ export function StatisticsView() {
                               if (!noteData) return null;
 
                               const dateStr = normalize(noteData.date);
+                              const canShowNote = canShowWeeklyNote(noteData);
+                              const note = canShowNote
+                                ? noteData.note ?? getNote(noteData.emotion!, Number(noteData.score))
+                                : undefined;
 
                               // 🔥 map 안에서는 hook 금지 → 미리 계산한 weeklyContentLengths 사용
                               const realContentLength =
@@ -998,17 +1121,33 @@ export function StatisticsView() {
                                   style={{
                                     left: `${xPercent}%`,
                                     top: "0px",
-                                    transform: "translate(-50%, -50%)",
+                                    width: "40px",
+                                    height: "140px",
+                                    transform: "translateX(-50%)",
                                     zIndex: 10,
                                   }}
                                 >
-                                  <NoteHead
-                                    note={noteData.note}
-                                    emotion={noteData.emotion}
-                                    score={noteData.score}
-                                    contentLength={realContentLength}
-                                    size={35}
-                                  />
+                                  {canShowNote ? (
+                                    <NoteHead
+                                      note={note!}
+                                      emotion={noteData.emotion!}
+                                      score={Number(noteData.score)}
+                                      contentLength={realContentLength}
+                                      size={35}
+                                    />
+                                  ) : (
+                                    <div
+                                      className="absolute z-20"
+                                      style={{
+                                        left: "50%",
+                                        top: "72px",
+                                        transform: "translate(-50%, -50%)",
+                                      }}
+                                      title="분석 결과 없음"
+                                    >
+                                      <NaturalSignImage width={28} height={64} />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             });
@@ -1023,13 +1162,14 @@ export function StatisticsView() {
                             return dateList.map((dateStr, i) => {
                               const noteData = weeklyNotes.find(n => normalize(n.date) === dateStr);
                               const dayName = dayOfWeekNames[i];
+                              const canShowLabel = canShowWeeklyNote(noteData);
 
                               return (
                                 <div key={i} className="flex-1 text-center">
                                   <span className={`text-xs block ${noteData ? 'font-medium' : 'text-gray-400'}`}>
                                     {dayName}
                                   </span>
-                                  {noteData && (
+                                  {canShowLabel && noteData?.emotion && (
                                     <div className="text-[10px] mt-0.5" style={{ color: '#7B8B4F' }}>
                                       {emotionNames[noteData.emotion]}
                                     </div>

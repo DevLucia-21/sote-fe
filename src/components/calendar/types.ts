@@ -9,9 +9,9 @@ export type WriteType = 'TEXT' | 'VOICE' | 'HANDWRITING';
 
 export interface DiaryEntry {
   date: string; // YYYY-MM-DD
-  emotion: EmotionType;
-  score: number; // 1-5
-  note: NoteType;
+  emotion?: EmotionType;
+  score?: number; // 0-5
+  note?: NoteType;
   analysisDisabled?: boolean;
   content?: string;
   keywords?: string[];

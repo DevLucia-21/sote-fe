@@ -131,6 +131,18 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
       return null;
     }
   }
+
+  const isToday = (dateStr: string) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    const today = new Date();
+
+    return (
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
+    );
+  };
   
   useEffect(() => {
     async function fetchData() {
@@ -247,7 +259,8 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           }
         }
 
-        const challenge = await fetchChallenge();
+        const shouldFetchChallenge = isToday(diaryData.date);
+        const challenge = shouldFetchChallenge ? await fetchChallenge() : null;
         const mappedChallenge = challenge
           ? {
               title: challenge.category,
@@ -265,7 +278,7 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
           music: raw.music
             ? { ...raw.music, coverImageUrl: raw.music.coverImageUrl ?? coverUrl }
             : undefined,
-          challenge: raw.challenge ?? mappedChallenge,
+          challenge: shouldFetchChallenge ? raw.challenge ?? mappedChallenge : null,
         });
 
         if (!mappedAnalysisData) {
@@ -365,18 +378,6 @@ export function DiaryDetailView({ diary, onBack, onEdit, onDelete, isEasyMode, c
     }
   };
 
-  const isToday = (dateStr: string) => {
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    const today = new Date();
-
-    return (
-      d.getFullYear() === today.getFullYear() &&
-      d.getMonth() === today.getMonth() &&
-      d.getDate() === today.getDate()
-    );
-  };
-  
   return (
     <div className="fixed inset-x-0 top-0 bottom-0 bg-background z-40 overflow-y-auto pb-24">
       <div className="bg-card shadow-sm sticky top-0 z-50 border-b border-border">

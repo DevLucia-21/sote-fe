@@ -3,6 +3,7 @@ import { NoteHead } from './NoteHead';
 import { QuarterRest } from './QuarterRest';
 import { NaturalSignImage } from './NaturalSignImage';
 import { DiaryEntry } from './types';
+import { getNote } from './noteMapping';
 
 interface CalendarCellProps {
   day?: number;
@@ -57,6 +58,9 @@ export function CalendarCell({
     !diaryEntry.analysisDisabled &&
     diaryEntry.emotion &&
     Number.isFinite(Number(diaryEntry.score));
+  const note = canShowNote && diaryEntry
+    ? diaryEntry.note ?? getNote(diaryEntry.emotion!, Number(diaryEntry.score))
+    : undefined;
 
   return (
     <div
@@ -81,9 +85,9 @@ export function CalendarCell({
 
       {canShowNote && diaryEntry && (
         <NoteHead
-          note={diaryEntry.note}
+          note={note!}
           emotion={diaryEntry.emotion}
-          score={diaryEntry.score}
+          score={Number(diaryEntry.score)}
           contentLength={diaryEntry.contentLength}
           onClick={handleClick}
           size={noteSize}
