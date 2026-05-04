@@ -257,10 +257,6 @@ export function EasySettingsView({ onLogout }) {
       const finalUrl = res.data;
 
       // 3) 서버 실제 URL로 덮어쓰기
-      console.log("🧩 setProfileData 호출 위치", {
-        reason: "초기 로딩",
-        incoming: { ...res, profileImageUrl }
-      });
       setProfileData(prev => ({
         ...prev,
         hasProfileImage: true,
@@ -316,7 +312,6 @@ export function EasySettingsView({ onLogout }) {
         newPassword: passwordData.newPassword,
       });
 
-      console.log("비밀번호 변경")
       toast.success("비밀번호가 변경되었습니다.");
       setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch (err) {

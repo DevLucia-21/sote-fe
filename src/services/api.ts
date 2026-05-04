@@ -103,7 +103,6 @@ apiClient.interceptors.response.use(
 
       const refreshToken = AuthStorage.getRefreshToken();
       if (!refreshToken) {
-        console.warn("❌ refreshToken 없음 → 로그아웃");
         notifyAuthExpired();
         return Promise.reject(error);
       }
@@ -122,7 +121,6 @@ apiClient.interceptors.response.use(
 
             AuthStorage.setTokens(accessToken, newRefresh);
 
-            console.log("🔁 Access Token 자동 갱신 완료");
 
             isRefreshing = false;
             resolve(accessToken);

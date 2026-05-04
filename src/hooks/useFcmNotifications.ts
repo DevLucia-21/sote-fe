@@ -74,7 +74,6 @@ export function useFcmNotifications() {
         }
 
         if (import.meta.env.DEV) {
-          console.warn("FCM 토큰 저장 실패");
         }
       }
     }

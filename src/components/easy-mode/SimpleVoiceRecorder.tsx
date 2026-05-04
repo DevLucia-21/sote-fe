@@ -96,7 +96,6 @@ export function SimpleVoiceRecorder({ onTranscriptComplete, onError }: SimpleVoi
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      console.log("🟢 STT 응답 데이터:", sttRes.data);
 
       const { text } = sttRes.data;
 

@@ -42,7 +42,6 @@ export interface STTSaveData {
 }
 
 export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, userKeywords }: STTTranscribeProps) {
-  console.log("📅 [DEBUG] STTTranscribe props.selectedDate =", selectedDate);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -68,12 +67,10 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         if (navigator.permissions && navigator.permissions.query) {
           const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
           setPermissionStatus(result.state);
-          console.log('🎤 마이크 권한 상태:', result.state);
           
           // 권한 상태 변경 감지
           result.addEventListener('change', () => {
             setPermissionStatus(result.state);
-            console.log('🔄 마이크 권한 변경됨:', result.state);
             if (result.state === 'granted') {
               setPermissionDenied(false);
               toast.success('마이크 권한이 허용되었습니다! 이제 녹음을 시작할 수 있습니다.');
@@ -81,7 +78,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
           });
         }
       } catch (error) {
-        console.log('⚠️ 권한 체크 API 지원 안 됨 (일부 브라우저는 지원하지 않음)');
       }
     };
     
@@ -155,7 +151,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
   // 녹음 시작
   const handleStartRecording = async () => {
     try {
-      console.log('🎤 녹음 시작 시도...');
       
       // 브라우저 지원 확인
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -164,8 +159,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         return;
       }
 
-      console.log('✅ MediaDevices API 지원됨');
-      console.log('🔍 마이크 권한 요청 중...');
       
       // 마이크 권한 요청 및 스트림 가져오기
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -176,8 +169,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         } 
       });
       
-      console.log('✅ 마이크 권한 승인됨');
-      console.log('📊 오디오 트랙:', stream.getAudioTracks());
       
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -187,20 +178,16 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunks.push(event.data);
-          console.log('📦 오디오 청크 수신:', event.data.size, 'bytes');
         }
       };
       
       mediaRecorder.onstop = () => {
-        console.log('⏹️ 녹음 중지됨');
         const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-        console.log('💾 최종 오디오 크기:', audioBlob.size, 'bytes');
         setRecordedAudio(audioBlob);
         setRecordedUrl(URL.createObjectURL(audioBlob));
         
         stream.getTracks().forEach(track => {
           track.stop();
-          console.log('🛑 트랙 중지:', track.label);
         });
         
         if (recordingIntervalRef.current) {
@@ -214,7 +201,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       };
       
       mediaRecorder.start();
-      console.log('🎙️ 녹음 시작됨, 상태:', mediaRecorder.state);
       
       setRecordingStatus('recording');
       setRecordingTime(0);
@@ -315,7 +301,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       }
 
       const diaryDate = new Date().toISOString().split("T")[0];
-      console.log("📤 [DEBUG] STT API 요청 날짜 =", diaryDate);
       
       const formData = new FormData();
       formData.append('file', file);
@@ -323,12 +308,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
       formData.append("diary_date", diaryDate);
       formData.append('do_vad', doVad.toString());
 
-      console.log("📤 STT API 요청 formData:", {
-        file: file.name,
-        user_id: userId,
-        diary_date: diaryDate,
-        do_vad: doVad,
-      });
 
       if (!AI_BASE_URL) {
         throw new Error("VITE_AI_BASE_URL is not configured.");
@@ -340,10 +319,8 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
         },
       });
 
-      console.log("🟢 STT API 응답:", sttRes.data);
 
       const { text, spring_id } = sttRes.data;
-      console.log("🟢 STT 응답 spring_id:", spring_id);
 
       if (!text) {
         toast.error("검사 결과가 비어 있어요. 다시 시도해 주세요.");
@@ -373,22 +350,9 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
   };
 
   const handleSaveAsDiary = async () => {
-    console.log("🟢 [DEBUG] --- handleSaveAsDiary() 실행됨 ---");
-    console.log("📅 selectedDate =", selectedDate);
-    console.log("📝 transcribedText =", transcribedText);
-    console.log("🔑 realKeywordIds =", realKeywordIds);
-    console.log("💛 selectedEmotion =", selectedEmotion);
-    console.log("🔊 sttId =", sttId);
 
     const userId = localStorage.getItem("user_id");
 
-    console.log("📦 최종적으로 DiaryEntry로 전달될 onSave payload:", {
-      content: transcribedText,
-      date: selectedDate,
-      keywordIds: realKeywordIds,
-      emotionType: selectedEmotion !== "none" ? selectedEmotion : null,
-      sttId: Number(sttId),
-    });
 
     if (!transcribedText.trim()) {
       toast.error('변환된 텍스트가 없습니다.');
@@ -434,7 +398,6 @@ export function STTTranscribe({ onBack, onSave, onStartAnalysis, selectedDate, u
 
     try {
       toast.success("저장 완료! 감정 분석을 시작합니다.");
-      console.log("저장 완료! 감정 분석을 시작합니다.")
 
       if (onStartAnalysis && savedDiaryId) {
         onStartAnalysis({

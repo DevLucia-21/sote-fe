@@ -60,7 +60,6 @@ export function MonthlyChallengeView({ onBack }: MonthlyChallengeViewProps) {
       const res = await api.get("/api/challenge/history/monthly", {
         params: { year, month },
       });
-      console.log("월간 응답:", res.data);
 
       // API는 배열로 오니까 날짜별로 재구성
       const map: Record<number, ChallengeData> = {};

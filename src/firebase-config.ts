@@ -52,7 +52,6 @@ export async function requestFcmToken() {
     });
   } catch (error) {
     if (import.meta.env.DEV) {
-      console.warn("FCM 토큰 요청 실패", error);
     }
 
     return null;

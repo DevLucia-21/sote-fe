@@ -28,7 +28,6 @@ interface DailyHealthSummary {
 }
 
 export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: HealthStatsTabProps) {
-  console.log("[HealthStatsTab] 렌더 시작, isConnected =", isConnected);
   
   const [health, setHealth] = useState<DailyHealthSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,12 +36,9 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
   const [caffeineInput, setCaffeineInput] = useState(0);
 
   const handlePairingNavigate = () => {
-    console.log("[HealthStatsTab] handlePairingNavigate 호출됨");
     if (onNavigateToPairing) {
-      console.log("[HealthStatsTab] 부모의 onNavigateToPairing 실행");
       onNavigateToPairing();
     } else {
-      console.warn("[HealthStatsTab] 부모 onNavigateToPairing이 없음!");
     }
   };
 
@@ -50,20 +46,16 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
   // 📌 오늘의 건강 데이터 조회
   // ============================================
   useEffect(() => {
-    console.log("[HealthStatsTab] useEffect 실행, isConnected =", isConnected);
 
     if (!isConnected) {
-      console.log("[HealthStatsTab] 연결 안됨 → 데이터 fetch 중단");
       return;
     }
 
     const fetchToday = async () => {
       try {
-        console.log("[HealthStatsTab] 오늘의 건강 데이터 요청 시작");
         setLoading(true);
 
         const res = await api.get("/api/health/daily/today");
-        console.log("[HealthStatsTab] 서버 응답:", res.data);
 
         const server = res.data;
 
@@ -79,7 +71,6 @@ export function HealthStatsTab({ isConnected = true, onNavigateToPairing }: Heal
       } catch (e) {
         console.error("[HealthStatsTab] 건강 데이터 조회 실패", e);
       } finally {
-        console.log("[HealthStatsTab] 로딩 종료");
         setLoading(false);
       }
     };

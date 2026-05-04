@@ -46,7 +46,6 @@ export function LPMonthlyView({
         const res = await api.get(`/api/lp/monthly?year=${year}&month=${month}`);
         const list = res.data;
 
-        console.log("📦 LP Monthly Raw:", list);
 
         // 🔥 감정 가져오기
         const withEmotion = await Promise.all(
@@ -57,14 +56,12 @@ export function LPMonthlyView({
               const diaryRes = await api.get(`/api/diaries?date=${dateStr}`);
               const emotion = diaryRes.data?.emotionType; // JOY, SADNESS 등
 
-              console.log("🎨 감정 가져오기 성공:", dateStr, emotion);
 
               return {
                 ...m,
                 diaryEmotion: emotion,
               };
             } catch (e) {
-              console.log("⚠️ 감정 없음:", dateStr);
               return {
                 ...m,
                 diaryEmotion: null,
@@ -73,7 +70,6 @@ export function LPMonthlyView({
           })
         );
 
-        console.log("🎨 감정 병합 완료:", withEmotion);
         setMusicList(withEmotion);
       } catch (e) {
         console.error("❌ 월간 LP 불러오기 실패:", e);

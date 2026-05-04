@@ -27,7 +27,6 @@ export function LPDisc({
 }: LPDiscProps) {
   const sizes = sizeMap[size];
 
-  console.log("🎨 LPDisc emotionColor:", emotionColor);
 
   return (
     <motion.div

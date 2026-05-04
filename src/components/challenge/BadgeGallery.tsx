@@ -50,7 +50,6 @@ export function BadgeGallery({ onFetchBadges }: BadgeGalleryProps) {
       } else {
         // 2) 기본 API 사용
         const res = await api.get("/api/challenge/badges");
-        console.log(res.data);
         unlocked = res.data || [];
       }
 

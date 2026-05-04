@@ -647,9 +647,6 @@ export function EasyCalendarView() {
 
               if (diary) {
                 const note = diary.analysisDisabled ? null : getNote(diary.emotion, diary.score);
-                console.log(
-                  `🎵 [Calendar] ${key} | emotion=${diary.emotion}, score=${diary.score} → note=${note}`
-                );
               }
 
               return (

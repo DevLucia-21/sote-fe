@@ -359,7 +359,6 @@ export function AuthScreen({ onLogin, onBackToAuth }: AuthScreenProps) {
     questionId: Number(formData.findSecurityQuestionId),
     securityAnswer: formData.findSecurityAnswer?.trim(),
   };
-  console.log("📤[FindEmail] Sending payload to server:", payload);
   
     setIsLoading(true);
 

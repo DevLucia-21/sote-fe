@@ -27,7 +27,6 @@ export function ChallengeDayDetail({ challengeId, onBack }: ChallengeDayDetailPr
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log("받은 id:", challengeId);
     
     const fetchDetail = async () => {
       try {

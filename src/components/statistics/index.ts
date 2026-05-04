@@ -1,1 +1,0 @@
-export { WatchStressCard } from './WatchStressCard';

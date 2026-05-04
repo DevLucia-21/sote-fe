@@ -313,8 +313,6 @@ export function StatisticsView() {
   const isHealthConnected = localStorage.getItem('healthDataConnected') === 'true';
   const [showPairing, setShowPairing] = useState(false);
 
-  console.log("🔥 [StatisticsView] selectedTab =", selectedTab);
-  console.log("🔥 [StatisticsView] showPairing =", showPairing);
 
   const characterToInstrument: Record<string, string> = {
     "PIANO": "piano",
@@ -426,8 +424,6 @@ export function StatisticsView() {
 
   useEffect(() => {
     const fetchWeeklyData = async () => {
-      console.log("🌙 baseDate =", currentWeek.baseDate);
-      console.log("📅 fetch with year/month =", year, month);
       setIsLoadingWeekly(true);
       try {
         const base = currentWeek.baseDate;
@@ -711,7 +707,6 @@ export function StatisticsView() {
   }, []);
 
   useEffect(() => {
-  console.log("🔥 [totalKeywordMapping data] =", totalKeywordMapping);
 }, [totalKeywordMapping]);
 
   // 악기 음 샘플 가져오기
@@ -741,7 +736,6 @@ export function StatisticsView() {
         },
         baseUrl: `${SOUNDFONT_BASE}/${instPath}/`,
         onload: () => {
-          console.log("🎵 샘플러 로드 완료");
           samplerRef.current = sampler;
           setSamplerLoaded(true);
         }
@@ -753,18 +747,10 @@ export function StatisticsView() {
 
   // 음 재생
   const playMelody = async () => {
-    console.group("🎧 PLAY MELODY DEBUG START");
 
     await Tone.start();
-    console.log("🔊 Tone.start() 완료");
-
-    // 샘플러 상태
-    console.log("🎹 samplerLoaded =", samplerLoaded);
-    console.log("🎹 samplerRef =", samplerRef.current);
 
     if (!samplerLoaded || !samplerRef.current) {
-      console.warn("⚠️ 샘플러가 아직 준비되지 않았습니다!");
-      console.groupEnd();
       return;
     }
 
@@ -772,23 +758,10 @@ export function StatisticsView() {
     const weekDays = getWeekDateList(currentWeek.baseDate);
     const now = Tone.now();
 
-    // 디버깅 스택
-    const debugList: any[] = [];
-
     weekDays.forEach((dateStr, i) => {
       const noteObj = weeklyNotes.find(n => n.date === dateStr || normalize(n.date) === dateStr);
 
-      debugList.push({
-        index: i,
-        dateStr,
-        noteObj,
-        noteValue: noteObj?.note,
-        mapped: noteObj?.note ? NOTE_MAP[noteObj.note] : null,
-        delay: now + i * 0.6
-      });
-
       if (!canShowWeeklyNote(noteObj)) {
-        console.warn(`⚠️ ${dateStr}: 재생 가능한 분석 음표 없음`);
         return;
       }
 
@@ -800,13 +773,10 @@ export function StatisticsView() {
         return;
       }
 
-      console.log(`🎵 재생 예약 → ${midiNote} @ time = ${now + i * 0.6}`);
       sampler.triggerAttackRelease(midiNote, 0.5, now + i * 0.6);
     });
 
-    console.table(debugList);
 
-    console.groupEnd();
 
     setIsPlaying(true);
     setTimeout(() => setIsPlaying(false), weekDays.length * 600);
@@ -868,7 +838,6 @@ export function StatisticsView() {
           <HealthStatsTab
             isConnected={isHealthConnected === 'true'}
             onNavigateToPairing={() => {
-              console.log("📲 health: setShowPairing(true)");
               setShowPairing(true);
             }}
           />

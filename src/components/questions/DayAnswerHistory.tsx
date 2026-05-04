@@ -59,18 +59,6 @@ export function DayAnswerHistory({ day, month, onClose }: DayAnswerHistoryProps)
       /** 2) 이 달 기준으로 questionDay === day 인 질문 찾기 */
       const baseMatch = baseList.find((item: any) => item.questionDay === day);
 
-      console.group(`📌 기준 월(${month}) 질문 탐색`);
-baseList.forEach((item: any) => {
-  console.log({
-    questionDay: item.questionDay,
-    date: item.date,
-    kstDay: item.date ? getKSTDay(item.date) : null,
-    questionContent: item.questionContent,
-    answerText: item.answerText
-  });
-});
-console.groupEnd();
-
       if (!baseMatch) {
         setQuestionContent('');
         setStatus('empty');
@@ -95,14 +83,6 @@ console.groupEnd();
         });
 
         const monthlyList = res.data ?? [];
-
-        console.group(`🔍 ${monthStr} 월 탐색`);
-monthlyList.forEach((item: any) => {
-  console.log({
-    item
-  });
-});
-console.groupEnd();
 
         /** 🔥 같은 day를 가진 질문 찾기 */
         const match = monthlyList.find(

@@ -110,7 +110,6 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
     try {
       const res = await api.get(`/api/diaries`, { params: { date: dateStr } });
 
-      console.log("📌 checkDiaryExists 응답:", res.data);
 
       if (res.data && (res.data.id || res.data.content)) {
         setShowDiaryExistsModal(true);
@@ -282,7 +281,6 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
   useEffect(() => {
     api.get("/api/users/keywords")
       .then(res => {
-        console.log("📌 키워드 API 응답:", res.data);
         setUserKeywords(res.data);
       })
       .catch(err => console.error(err));
@@ -612,17 +610,11 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
           onBack={handleBack}
 
           onSave={(data) => {
-            console.log("💙 부모 onSave 호출됨:", data);
             handleSave(data);
           }}
 
           onStartAnalysis={(analysisRequest) => {
-            console.log("🟣 [DEBUG] --- DiaryEntry.onStartAnalysis ---");
-            console.log("📨 전달받은 analysisRequest:", analysisRequest);
 
-            console.log("📍 diaryId =", analysisRequest.diaryId);
-            console.log("📍 text =", analysisRequest.text);
-            console.log("📍 genreIds =", analysisRequest.genreIds);
 
             setPendingAnalysisPayload({
               diaryId: null, // 전시는 저장 안 함
@@ -649,12 +641,7 @@ export function DiaryEntry({ onNavigateToChallenge, onNavigateToCalendar }: Diar
           }}
 
           onStartAnalysis={(analysisRequest) => {
-            console.log("🟣 [DEBUG] --- DiaryEntry.onStartAnalysis ---");
-            console.log("📨 전달받은 analysisRequest:", analysisRequest);
 
-            console.log("📍 diaryId =", analysisRequest.diaryId);
-            console.log("📍 text =", analysisRequest.text);
-            console.log("📍 genreIds =", analysisRequest.genreIds);
 
             setPendingAnalysisPayload({
               diaryId: analysisRequest.diaryId,
