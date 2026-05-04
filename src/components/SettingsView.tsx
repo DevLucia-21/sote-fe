@@ -37,7 +37,6 @@ import { toast } from 'sonner';
 import { HealthDataView } from './HealthDataView';
 import { WatchPairingView } from './settings/WatchPairingView';
 import { characterInfo as importedCharacterInfo, type CharacterType } from './common/characterImages';
-import { requestFcmToken, onForegroundMessage } from "../firebase-config";
 
 type ViewType = 
   | 'main' 
@@ -53,35 +52,6 @@ interface SettingsViewProps {
 
 const characterInfo = importedCharacterInfo;
 type Character = CharacterType;
-
-function safeGet(key: string) {
-  try {
-    return typeof window !== "undefined" 
-      ? window.localStorage.getItem(key)
-      : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-const hasAuthTokens = () => {
-  const accessToken = safeGet("accessToken");
-  const refreshToken = safeGet("refreshToken");
-
-  return Boolean(accessToken && refreshToken);
-};
-
-const getErrorStatus = (error: unknown) => {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error
-  ) {
-    return (error as { response?: { status?: number } }).response?.status;
-  }
-
-  return undefined;
-};
 
 type NotificationKey =
   | 'diary'
@@ -500,98 +470,6 @@ export function SettingsView({ onBack, onLogout }: SettingsViewProps) {
     setKeywords(keywords.filter(k => k.id !== id));
     toast.success("키워드가 삭제되었습니다.");
   };
-
-  // 알림 설정
-  useEffect(() => {
-    let cancelled = false;
-
-    async function setupFCM() {
-      if (!userInfo || !hasAuthTokens()) {
-        return;
-      }
-
-      if (typeof Notification === "undefined") {
-        return;
-      }
-
-      if (Notification.permission !== "granted") {
-        const permission = await Notification.requestPermission();
-
-        if (permission !== "granted") {
-          return;
-        }
-      }
-
-      if (cancelled || !hasAuthTokens()) {
-        return;
-      }
-
-      const token = await requestFcmToken();
-
-      if (!token || cancelled || !hasAuthTokens()) {
-        return;
-      }
-
-      try {
-        await api.post("/api/settings/token", {
-          token,
-          deviceType: "WEB",
-        });
-
-        if (cancelled || !hasAuthTokens()) {
-          return;
-        }
-
-        localStorage.setItem("fcmToken", token);
-      } catch (e) {
-        if (getErrorStatus(e) === 403) {
-          return;
-        }
-
-        if (import.meta.env.DEV) {
-          console.warn("FCM 토큰 저장 실패");
-        }
-
-        return;
-      }
-    }
-
-    if (!userInfo || !hasAuthTokens() || typeof Notification === "undefined") {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setupFCM();
-
-    onForegroundMessage(payload => {
-      new Notification(payload.notification.title, {
-        body: payload.notification.body,
-        icon: "/icon.png"
-      });
-
-      toast.success(`🔔 ${payload.notification?.title}`);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [Boolean(userInfo)]);
-  // FCM 알림 테스트용(코드 최하단부와 함께)
-  // useEffect(() => {
-  //   onForegroundMessage(payload => {
-  //     const userId = localStorage.getItem("user_id");
-  //     new Notification(payload.notification.title, {
-  //       body: payload.notification.body,
-  //       icon: "/icon.png"
-  //     });
-  //     toast.success(`🔔 ${payload.notification?.title}`);
-  //   });
-  // }, []);
-  // const userInfoRef = useRef(null);
-  // useEffect(() => {
-  //   userInfoRef.current = userInfo;
-  // }, [userInfo]);
 
   const handleDeleteAccount = async () => {
     toast.success('회원 탈퇴가 완료되었습니다.');

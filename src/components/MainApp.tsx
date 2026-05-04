@@ -7,12 +7,15 @@ import { ChallengeView } from './ChallengeView';
 import { SettingsView } from './SettingsView';
 import { EasyModeApp } from './EasyModeApp';
 import { Calendar, BarChart3, PenTool, Music, Trophy } from 'lucide-react';
+import { useFcmNotifications } from '../hooks/useFcmNotifications';
 
 interface MainAppProps {
   onLogout?: () => void;
 }
 
 export function MainApp({ onLogout }: MainAppProps) {
+  useFcmNotifications();
+
   const [currentTab, setCurrentTab] = useState<'calendar' | 'statistics' | 'diary' | 'music' | 'challenge' | 'settings'>('calendar');
   const [theme, setTheme] = useState<'light' | 'dark' | 'easy'>(() => {
     const saved = localStorage.getItem('theme');

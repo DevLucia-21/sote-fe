@@ -20,6 +20,7 @@ import {
 } from '../../utils/deletedDiaryAnalysisWarning';
 import {
   clearRewrittenDiaryStatus,
+  hasRewrittenDiaryStatus,
   markDiaryAsRewritten,
 } from '../../utils/rewrittenDiaryStatus';
 import {
@@ -584,12 +585,40 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
 
     if (editMode && editingDiary) {
       const editPayload = {
-        id: (editingDiary as any).id ?? (editingDiary as any).diaryId,
-        diaryId: (editingDiary as any).diaryId ?? (editingDiary as any).id,
         date: editingDiary.date,
         content: content.trim(),
         keywordIds: getSelectedKeywordIds(),
-        emotionType: editingDiary.emotionType ?? null,
+        emotionType: (editingDiary as any).emotionType ?? null,
+      };
+      const editContentPayload = {
+        date: editPayload.date,
+        content: editPayload.content,
+      };
+      const hasExistingAnalysis =
+        !disableAnalysis &&
+        !hasRewrittenDiaryStatus(editPayload.date) &&
+        (editingDiary as any).analysisDisabled !== true;
+
+      const rewriteEditedDiary = async () => {
+        await api.delete("/api/diaries", { params: { date: editPayload.date } });
+        const rewriteRes = await api.post("/api/diaries", {
+          date: editPayload.date,
+          content: editPayload.content,
+          keywordIds: editPayload.keywordIds,
+          emotionType: editPayload.emotionType,
+        });
+
+        const rewrittenDiary = {
+          ...(rewriteRes.data ?? {}),
+          date: editPayload.date,
+          content: editPayload.content,
+          keywordIds: editPayload.keywordIds,
+          writeType,
+          analysisDisabled: true,
+        };
+
+        markDiaryAsRewritten(editPayload.date);
+        return rewrittenDiary;
       };
 
       try {
@@ -598,42 +627,30 @@ export function DiaryWrite({ onBack, onClose, onSave, editingDiary, initialWrite
         setAnalysisAttempt(0);
         setIsAnalyzing(false);
         setIsSaving(true);
-        const res = await api.put("/api/diaries", editPayload);
-        clearRewrittenDiaryStatus(editPayload.date);
 
-        toast.success("일기가 수정되었습니다!");
-        await onSave?.({
-          ...res.data,
-          date: editPayload.date,
-          content: editPayload.content,
-        });
-      } catch (e) {
-        if (isEasyMode && getErrorStatus(e) === 403) {
-          try {
-            await api.delete("/api/diaries", { params: { date: editPayload.date } });
-            const rewriteRes = await api.post("/api/diaries", {
-              date: editPayload.date,
-              content: editPayload.content,
-              keywordIds: editPayload.keywordIds,
-              emotionType: editPayload.emotionType,
-            });
-            const rewrittenDiary = {
-              ...(rewriteRes.data ?? {}),
-              date: editPayload.date,
-              content: editPayload.content,
-              writeType,
-              analysisDisabled: true,
-            };
+        if (!hasExistingAnalysis) {
+          const rewrittenDiary = await rewriteEditedDiary();
 
-            markDiaryAsRewritten(editPayload.date);
-            toast.success("일기가 수정되었습니다!");
-            await onSave?.(rewrittenDiary);
-            return;
-          } catch (rewriteError) {
-            console.error("이지모드 과거 일기 재작성 실패:", rewriteError);
-          }
+          toast.success("일기가 수정되었습니다!");
+          await onSave?.(rewrittenDiary);
+          return;
         }
 
+        const res = await api.put("/api/diaries", editContentPayload);
+        const updatedDiary = {
+          ...editingDiary,
+          ...(res.data ?? {}),
+          date: editPayload.date,
+          content: editPayload.content,
+          writeType,
+          analysisDisabled:
+            (editingDiary as any).analysisDisabled === true ||
+            (res.data as any)?.analysisDisabled === true,
+        };
+
+        toast.success("일기가 수정되었습니다!");
+        await onSave?.(updatedDiary);
+      } catch (e) {
         console.error("일기 수정 실패:", e);
         toast.error("일기 수정 중 문제가 발생했습니다.");
       } finally {

@@ -1,6 +1,11 @@
-// src/firebase-config.ts
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+  type Messaging,
+} from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,26 +16,55 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Firebase 초기화
 const app = initializeApp(firebaseConfig);
+let messagingPromise: Promise<Messaging | null> | null = null;
 
-// FCM Messaging 객체
-export const messaging = getMessaging(app);
+async function getMessagingInstance() {
+  if (!messagingPromise) {
+    messagingPromise = isSupported()
+      .then((supported) => (supported ? getMessaging(app) : null))
+      .catch(() => null);
+  }
 
-// 브라우저에서 FCM Token 요청 함수
+  return messagingPromise;
+}
+
 export async function requestFcmToken() {
   try {
-    const token = await getToken(messaging, {
-      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return null;
+    }
+
+    const messaging = await getMessagingInstance();
+    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+    if (!messaging || !vapidKey) {
+      return null;
+    }
+
+    const serviceWorkerRegistration = await navigator.serviceWorker.register(
+      "/firebase-messaging-sw.js"
+    );
+
+    return getToken(messaging, {
+      vapidKey,
+      serviceWorkerRegistration,
     });
-    return token;
   } catch (error) {
-    console.error("🔥 FCM Token 요청 실패:", error);
+    if (import.meta.env.DEV) {
+      console.warn("FCM 토큰 요청 실패", error);
+    }
+
     return null;
   }
 }
 
-// 포그라운드 메시지(앱 켜져 있을 때)
-export function onForegroundMessage(callback: (payload: any) => void) {
-  onMessage(messaging, callback);
+export async function onForegroundMessage(callback: (payload: any) => void) {
+  const messaging = await getMessagingInstance();
+
+  if (!messaging) {
+    return () => undefined;
+  }
+
+  return onMessage(messaging, callback);
 }

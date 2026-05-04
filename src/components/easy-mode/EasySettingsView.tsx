@@ -12,7 +12,6 @@ import { HealthDataView } from '../HealthDataView';
 import { WatchPairingView } from '../settings/WatchPairingView';
 import { characterInfo, type CharacterType } from '../common/characterImages';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { requestFcmToken, onForegroundMessage } from "../../firebase-config";
 
 type ViewType = 'main' | 'profile' | 'health' | 'watch-pairing';
 type Character = CharacterType;
@@ -182,48 +181,6 @@ export function EasySettingsView({ onLogout }) {
     };
 
     loadSharedSettings();
-  }, []);
-
-  useEffect(() => {
-    async function setupFCM() {
-      if (typeof Notification === "undefined") return;
-
-      if (Notification.permission !== "granted") {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
-      }
-
-      const token = await requestFcmToken();
-      if (!token) return;
-
-      try {
-        await api.post("/api/settings/token", {
-          token,
-          deviceType: "MOBILE",
-        });
-        localStorage.setItem("fcmToken", token);
-      } catch (error) {
-        console.error("이지모드 FCM 토큰 저장 실패:", error);
-      }
-    }
-
-    setupFCM();
-
-    onForegroundMessage((payload) => {
-      const title = payload.notification?.title;
-      const body = payload.notification?.body;
-
-      if (title && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        new Notification(title, {
-          body,
-          icon: "/icon.png",
-        });
-      }
-
-      if (title) {
-        toast.success(title);
-      }
-    });
   }, []);
 
   useEffect(() => {
