@@ -21,8 +21,7 @@
 
 또한 감정 캘린더, 감정 통계, LP 보관함, 감정 악보 재생 기능을 통해 자신의 감정 기록과 챌린지 수행 결과를 다시 확인할 수 있습니다.
 
-본 저장소는 Fluxion 팀 캡스톤 프로젝트 **S:ote**의 프론트엔드 코드를 개인 포트폴리오용으로 정리한 리포지토리입니다.      
-원본 팀 리포지토리는 [`fluxion-capstone/sote-ui`](https://github.com/fluxion-capstone/sote-ui)이며, 현재 원본 저장소는 비공개 상태입니다.
+본 저장소는 Fluxion 팀 캡스톤 프로젝트 **S:ote**의 프론트엔드 코드를 개인 포트폴리오용으로 정리한 리포지토리입니다.
 
 | Item            | Description                              |
 | --------------- | ---------------------------------------- |
@@ -30,8 +29,10 @@
 | Team            | Fluxion                                  |
 | Period          | 2025 Capstone Design                     |
 | Award           | 2025 캡스톤 경진대회 아리상                        |
-| Main Role       | Frontend / Backend / AI                  |
 | Repository Type | Portfolio-maintained frontend repository |
+| Original Team Repository | [fluxion-capstone/sote-ui](https://github.com/fluxion-capstone/sote-ui) |
+| Personal Repository      | [DevLucia-21/sote-fe](https://github.com/DevLucia-21/sote-fe)     |
+| Main Role | Frontend UI/UX, service flow design, post-project refactoring |
 
 ---
 
@@ -58,6 +59,18 @@ S:ote는 단순히 일기를 저장하는 데 그치지 않고,
 
 특히 감정 기록을 단순 텍스트나 차트로만 보여주지 않고,      
 **악보와 LP**라는 감성적인 시각 요소로 표현하여 사용자가 자신의 감정 변화를 더 직관적으로 돌아볼 수 있도록 구현했습니다.
+
+---
+
+## Repository Role
+
+이 저장소는 S:ote 서비스의 프론트엔드 웹앱을 담당합니다.
+
+사용자가 일기를 작성하고, 감정 분석 결과를 확인하며,     
+감정 기반 음악 추천, 챌린지 수행, LP 보상, 캘린더와 통계 회고까지 이어지는 전체 사용자 화면 흐름을 구현했습니다.
+
+프로젝트 종료 이후에는 로컬 실행 오류를 수정하고,     
+분석 결과 미완료, 재작성 일기, 챌린지 상태 불일치와 같은 예외 상황에서도 화면 흐름이 깨지지 않도록 리팩토링했습니다.
 
 ---
 
@@ -392,6 +405,8 @@ src/
 ├── utils/
 │   └── auth.ts          # 인증 토큰 저장 및 관리
 │
+├── hooks/               # FCM 포그라운드 알림 처리 훅
+│
 ├── firebase-config.ts   # Firebase 클라이언트 설정
 ├── App.tsx              # 앱 진입 흐름
 └── main.tsx             # React 엔트리 포인트
@@ -401,13 +416,15 @@ src/
 
 ## External Integration
 
-프론트엔드는 Spring Boot 백엔드, FastAPI AI 서버, Firebase Cloud Messaging, Spotify와 연동하여     
-감정 분석 결과, 챌린지 상태, LP 보상, 알림 설정, 추천 음악 정보를 화면에 반영했습니다.
+프론트엔드는 주로 Spring Boot 백엔드 API를 통해 사용자, 일기, 분석 결과, 챌린지, LP 보상, 통계 데이터를 처리합니다.
+
+음성·손글씨 일기 입력과 감정 분석 결과 조회 흐름은 백엔드 및 AI 서버와 연결되는 사용자 화면 흐름으로 구성했으며,      
+Firebase Cloud Messaging을 통해 알림 설정과 푸시 알림 토큰 처리 흐름을 연동했습니다.
 
 | Integration              | Description                           |
 | ------------------------ | ------------------------------------- |
 | Spring Boot Backend      | 사용자, 일기, 분석 결과, 챌린지, LP 보상, 통계 데이터 연동 |
-| FastAPI AI Server        | STT, OCR, 감정 분석, 음악 추천 흐름 연동          |
+| AI/STT/OCR Flow          | 백엔드 및 AI 서버와 연결되는 음성·손글씨 입력, 감정 분석 결과 화면 흐름 |
 | Firebase Cloud Messaging | 일기 작성, 챌린지 수행, 감정 분석 완료 알림            |
 | Spotify                  | 추천 음악 앨범 이미지 및 외부 재생 링크 연동            |
 
@@ -521,7 +538,7 @@ git clone https://github.com/DevLucia-21/sote-fe.git
 cd sote-fe
 npm install
 ```
-.env.example 파일을 복사해 .env 파일을 생성한 뒤, 필요한 환경 변수를 입력합니다.
+`.env.example` 파일을 복사해 `.env` 파일을 생성한 뒤, 필요한 환경 변수를 입력합니다.
 ```bash
 npm run dev
 ```

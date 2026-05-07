@@ -5,7 +5,7 @@ import { Badge } from '../ui/badge';
 import { EmotionType, InstrumentType } from './types';
 import { emotionStyles } from './mockData';
 import { getEmotionCharacterImage, CharacterType, EmotionType as EmotionAPIType } from '../common/characterImages';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 interface EmotionCardProps {
   emotion: EmotionType;

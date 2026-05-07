@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { HealthDataView } from '../HealthDataView';
 import { WatchPairingView } from '../settings/WatchPairingView';
 import { characterInfo, type CharacterType } from '../common/characterImages';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 type ViewType = 'main' | 'profile' | 'health' | 'watch-pairing';
 type Character = CharacterType;

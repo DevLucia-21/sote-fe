@@ -3,7 +3,7 @@ import { Music2 } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { emotionStyles } from './mockData';
-import { ImageWithFallback } from '../figma/ImageWithFallback';
+import { ImageWithFallback } from '../common/ImageWithFallback';
 
 interface MusicCardProps {
   title: string;
